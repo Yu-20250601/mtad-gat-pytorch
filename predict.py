@@ -116,7 +116,9 @@ if __name__ == "__main__":
         recon_n_layers=model_args.recon_n_layers,
         recon_hid_dim=model_args.recon_hid_dim,
         dropout=model_args.dropout,
-        alpha=model_args.alpha
+        alpha=model_args.alpha,
+        use_adaptive_sparse_feat_gat=getattr(model_args, "use_adaptive_sparse_feat_gat", False),
+        node_embed_dim=getattr(model_args, "node_embed_dim", 16),
     )
 
     device = "cuda" if args.use_cuda and torch.cuda.is_available() else "cpu"
@@ -154,6 +156,8 @@ if __name__ == "__main__":
         "gamma": args.gamma,
         "reg_level": reg_level,
         "save_path": f"{model_path}",
+        "export_sparse_attention": args.export_sparse_attention,
+        "sparse_attention_topk": args.sparse_attention_topk,
     }
 
     # Creating a new summary-file each time when new prediction are made with a pre-trained model

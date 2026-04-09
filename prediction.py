@@ -32,10 +32,13 @@ class Predictor:
         self.use_cuda = True
         self.pred_args = pred_args
         self.summary_file_name = summary_file_name
+        self.export_sparse_attention = pred_args.get("export_sparse_attention", False)
+        self.sparse_attention_topk = pred_args.get("sparse_attention_topk", 20)
 
-    def get_score(self, values):
+    def get_score(self, values, return_attention=False):
         """Method that calculates anomaly score using given model and data
         :param values: 2D array of multivariate time series data, shape (N, k)
+        :param return_attention: Whether to return sparse attention matrix per window
         :return np array of anomaly scores + dataframe with prediction for each channel and global anomalies
         """
 
@@ -47,12 +50,21 @@ class Predictor:
         self.model.eval()
         preds = []
         recons = []
+        attentions = []
         with torch.no_grad():
             for x, y in tqdm(loader):
                 x = x.to(device)
                 y = y.to(device)
 
-                y_hat, _ = self.model(x)
+                if return_attention:
+                    model_out = self.model(x, return_sparse_attention=True)
+                    if len(model_out) == 3:
+                        y_hat, _, sparse_attn = model_out
+                        attentions.append(sparse_attn.detach().cpu().numpy())
+                    else:
+                        y_hat, _ = model_out
+                else:
+                    y_hat, _ = self.model(x)
 
                 # Shifting input to include the observed value (y) when doing the reconstruction
                 recon_x = torch.cat((x[:, 1:, :], y), dim=1)
@@ -91,7 +103,48 @@ class Predictor:
         anomaly_scores = np.mean(anomaly_scores, 1)
         df['A_Score_Global'] = anomaly_scores
 
-        return df
+        if return_attention and len(attentions) > 0:
+            return df, np.concatenate(attentions, axis=0)
+        return df, None
+
+    def _save_sparse_attention_artifacts(self, test_pred_df, test_sparse_attention):
+        if test_sparse_attention is None:
+            print("Sparse attention export skipped: model did not return sparse attention.")
+            return
+
+        output_dir = f"{self.save_path}/rca_attention"
+        os.makedirs(output_dir, exist_ok=True)
+
+        scores = test_pred_df["A_Score_Global"].values
+        if "A_Pred_Global" in test_pred_df.columns:
+            candidate_idx = np.where(test_pred_df["A_Pred_Global"].values == 1)[0]
+            if len(candidate_idx) == 0:
+                candidate_idx = np.arange(len(scores))
+        else:
+            candidate_idx = np.arange(len(scores))
+
+        sorted_idx = candidate_idx[np.argsort(scores[candidate_idx])[::-1]]
+        topk = min(self.sparse_attention_topk, len(sorted_idx))
+        selected = sorted_idx[:topk]
+
+        np.save(f"{output_dir}/all_sparse_attention.npy", test_sparse_attention)
+        np.save(f"{output_dir}/selected_indices.npy", selected)
+
+        for rank, idx in enumerate(selected):
+            attn = test_sparse_attention[idx]
+            np.save(f"{output_dir}/attn_idx_{int(idx)}.npy", attn)
+
+            plt.figure(figsize=(6, 5))
+            plt.imshow(attn, cmap="viridis", aspect="auto")
+            plt.colorbar()
+            plt.title(f"Sparse Attention idx={int(idx)} rank={rank + 1}")
+            plt.xlabel("Source Sensor")
+            plt.ylabel("Target Sensor")
+            plt.tight_layout()
+            plt.savefig(f"{output_dir}/attn_idx_{int(idx)}.png", dpi=150)
+            plt.close()
+
+        print(f"Saved sparse attention artifacts to {output_dir}")
 
     def predict_anomalies(self, train, test, true_anomalies, load_scores=False, save_output=True,
                           scale_scores=False):
@@ -106,6 +159,7 @@ class Predictor:
         :param scale_scores: Whether to feature-wise scale anomaly scores
         """
 
+        test_sparse_attention = None
         if load_scores:
             print("Loading anomaly scores")
 
@@ -116,8 +170,11 @@ class Predictor:
             test_anomaly_scores = test_pred_df['A_Score_Global'].values
 
         else:
-            train_pred_df = self.get_score(train)
-            test_pred_df = self.get_score(test)
+            train_pred_df, _ = self.get_score(train, return_attention=False)
+            test_pred_df, test_sparse_attention = self.get_score(
+                test,
+                return_attention=self.export_sparse_attention,
+            )
 
             train_anomaly_scores = train_pred_df['A_Score_Global'].values
             test_anomaly_scores = test_pred_df['A_Score_Global'].values
@@ -198,5 +255,7 @@ class Predictor:
             print(f"Saving output to {self.save_path}/<train/test>_output.pkl")
             train_pred_df.to_pickle(f"{self.save_path}/train_output.pkl")
             test_pred_df.to_pickle(f"{self.save_path}/test_output.pkl")
+            if self.export_sparse_attention:
+                self._save_sparse_attention_artifacts(test_pred_df, test_sparse_attention)
 
         print("-- Done.")

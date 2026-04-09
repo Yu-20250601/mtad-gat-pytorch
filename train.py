@@ -86,7 +86,9 @@ if __name__ == "__main__":
         recon_n_layers=args.recon_n_layers,
         recon_hid_dim=args.recon_hid_dim,
         dropout=args.dropout,
-        alpha=args.alpha
+        alpha=args.alpha,
+        use_adaptive_sparse_feat_gat=args.use_adaptive_sparse_feat_gat,
+        node_embed_dim=args.node_embed_dim,
     )
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.init_lr)
@@ -154,6 +156,8 @@ if __name__ == "__main__":
         "gamma": args.gamma,
         "reg_level": reg_level,
         "save_path": save_path,
+        "export_sparse_attention": args.export_sparse_attention,
+        "sparse_attention_topk": args.sparse_attention_topk,
     }
     best_model = trainer.model
     predictor = Predictor(

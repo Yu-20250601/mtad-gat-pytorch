@@ -29,6 +29,8 @@ def get_parser():
     parser.add_argument("--use_gatv2", type=str2bool, default=True)
     parser.add_argument("--feat_gat_embed_dim", type=int, default=None)
     parser.add_argument("--time_gat_embed_dim", type=int, default=None)
+    parser.add_argument("--use_adaptive_sparse_feat_gat", type=str2bool, default=False)
+    parser.add_argument("--node_embed_dim", type=int, default=16)
     # GRU layer
     parser.add_argument("--gru_n_layers", type=int, default=1)
     parser.add_argument("--gru_hid_dim", type=int, default=150)
@@ -59,6 +61,8 @@ def get_parser():
     parser.add_argument("--level", type=float, default=None)
     parser.add_argument("--q", type=float, default=None)
     parser.add_argument("--dynamic_pot", type=str2bool, default=False)
+    parser.add_argument("--export_sparse_attention", type=str2bool, default=False)
+    parser.add_argument("--sparse_attention_topk", type=int, default=20)
 
     # --- Other ---
     parser.add_argument("--comment", type=str, default="")

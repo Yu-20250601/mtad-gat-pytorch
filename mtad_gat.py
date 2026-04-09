@@ -4,6 +4,7 @@ import torch.nn as nn
 from modules import (
     ConvLayer,
     FeatureAttentionLayer,
+    AdaptiveSparseGAT,
     TemporalAttentionLayer,
     GRULayer,
     Forecasting_Model,
@@ -50,22 +51,47 @@ class MTAD_GAT(nn.Module):
         recon_n_layers=1,
         recon_hid_dim=150,
         dropout=0.2,
-        alpha=0.2
+        alpha=0.2,
+        use_adaptive_sparse_feat_gat=False,
+        node_embed_dim=16,
     ):
         super(MTAD_GAT, self).__init__()
 
         self.conv = ConvLayer(n_features, kernel_size)
-        self.feature_gat = FeatureAttentionLayer(n_features, window_size, dropout, alpha, feat_gat_embed_dim, use_gatv2)
+        self.use_adaptive_sparse_feat_gat = use_adaptive_sparse_feat_gat
+        if self.use_adaptive_sparse_feat_gat:
+            self.feature_gat = AdaptiveSparseGAT(
+                n_features=n_features,
+                window_size=window_size,
+                dropout=dropout,
+                alpha=alpha,
+                embed_dim=feat_gat_embed_dim,
+                use_gatv2=use_gatv2,
+                node_embed_dim=node_embed_dim,
+            )
+        else:
+            self.feature_gat = FeatureAttentionLayer(
+                n_features,
+                window_size,
+                dropout,
+                alpha,
+                feat_gat_embed_dim,
+                use_gatv2,
+            )
         self.temporal_gat = TemporalAttentionLayer(n_features, window_size, dropout, alpha, time_gat_embed_dim, use_gatv2)
         self.gru = GRULayer(3 * n_features, gru_hid_dim, gru_n_layers, dropout)
         self.forecasting_model = Forecasting_Model(gru_hid_dim, forecast_hid_dim, out_dim, forecast_n_layers, dropout)
         self.recon_model = ReconstructionModel(window_size, gru_hid_dim, recon_hid_dim, out_dim, recon_n_layers, dropout)
 
-    def forward(self, x):
+    def forward(self, x, return_sparse_attention=False):
         # x shape (b, n, k): b - batch size, n - window size, k - number of features
 
         x = self.conv(x)
-        h_feat = self.feature_gat(x)
+        sparse_attention = None
+        if self.use_adaptive_sparse_feat_gat and return_sparse_attention:
+            h_feat, sparse_attention = self.feature_gat(x, return_sparse_attention=True)
+        else:
+            h_feat = self.feature_gat(x)
         h_temp = self.temporal_gat(x)
 
         h_cat = torch.cat([x, h_feat, h_temp], dim=2)  # (b, n, 3k)
@@ -76,4 +102,6 @@ class MTAD_GAT(nn.Module):
         predictions = self.forecasting_model(h_end)
         recons = self.recon_model(h_end)
 
+        if sparse_attention is not None:
+            return predictions, recons, sparse_attention
         return predictions, recons

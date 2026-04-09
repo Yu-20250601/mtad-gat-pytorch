@@ -2,6 +2,39 @@ import torch
 import torch.nn as nn
 
 
+class Sparsemax(nn.Module):
+    """Sparsemax activation.
+
+    Projects logits onto the probability simplex and produces exact zeros for
+    low-score entries, unlike softmax.
+    """
+
+    def __init__(self, dim=-1):
+        super(Sparsemax, self).__init__()
+        self.dim = dim
+
+    def forward(self, input_tensor):
+        dim = self.dim
+        z = input_tensor - input_tensor.max(dim=dim, keepdim=True)[0]
+        z_sorted, _ = torch.sort(z, dim=dim, descending=True)
+        z_cumsum = torch.cumsum(z_sorted, dim=dim)
+
+        dim_size = z.size(dim)
+        rhos = torch.arange(1, dim_size + 1, device=z.device, dtype=z.dtype)
+        view_shape = [1] * z.dim()
+        view_shape[dim] = dim_size
+        rhos = rhos.view(view_shape)
+
+        support = 1 + rhos * z_sorted > z_cumsum
+        k = support.sum(dim=dim, keepdim=True).clamp(min=1)
+
+        # tau is the data-dependent threshold of simplex projection:
+        # only entries with z_i > tau remain positive; the rest become exact 0.
+        tau = (torch.gather(z_cumsum, dim, k.long() - 1) - 1) / k
+        output = torch.clamp(z - tau, min=0)
+        return output
+
+
 class ConvLayer(nn.Module):
     """1-D Convolution layer to extract high-level features of each time-series input
     :param n_features: Number of input features/nodes
@@ -120,6 +153,109 @@ class FeatureAttentionLayer(nn.Module):
             return combined.view(v.size(0), K, K, 2 * self.window_size)
         else:
             return combined.view(v.size(0), K, K, 2 * self.embed_dim)
+
+
+class AdaptiveSparseGAT(nn.Module):
+    """Adaptive sparse feature-oriented GAT layer for MTAD-GAT.
+
+    Differences from FeatureAttentionLayer:
+    1) uses Sparsemax instead of Softmax for sparse graph structure learning
+    2) introduces learnable node embedding to model static sensor properties
+    3) optionally returns sparse attention matrix for RCA visualization
+    """
+
+    def __init__(
+        self,
+        n_features,
+        window_size,
+        dropout,
+        alpha,
+        embed_dim=None,
+        use_gatv2=True,
+        use_bias=True,
+        node_embed_dim=16,
+    ):
+        super(AdaptiveSparseGAT, self).__init__()
+        self.n_features = n_features
+        self.window_size = window_size
+        self.dropout = dropout
+        self.embed_dim = embed_dim if embed_dim is not None else window_size
+        self.use_gatv2 = use_gatv2
+        self.num_nodes = n_features
+        self.use_bias = use_bias
+        self.node_embed_dim = node_embed_dim
+
+        if self.use_gatv2:
+            self.embed_dim *= 2
+            lin_input_dim = 2 * window_size
+            a_input_dim = self.embed_dim
+        else:
+            lin_input_dim = window_size
+            a_input_dim = 2 * self.embed_dim
+
+        self.lin = nn.Linear(lin_input_dim, self.embed_dim)
+        self.a = nn.Parameter(torch.empty((a_input_dim, 1)))
+        nn.init.xavier_uniform_(self.a.data, gain=1.414)
+
+        if self.use_bias:
+            self.bias = nn.Parameter(torch.zeros(n_features, n_features))
+
+        self.node_embedding = nn.Embedding(n_features, node_embed_dim)
+        self.node_pair_proj = nn.Linear(2 * node_embed_dim, 1, bias=False)
+
+        self.leakyrelu = nn.LeakyReLU(alpha)
+        self.sparsemax = Sparsemax(dim=2)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x, return_sparse_attention=False):
+        # x shape (b, n, k): b - batch size, n - window size, k - number of features
+        # For feature attention a node is all values of one sensor over the window.
+        x = x.permute(0, 2, 1)  # (b, k, n)
+
+        if self.use_gatv2:
+            a_input = self._make_attention_input(x)                 # (b, k, k, 2*window_size)
+            a_input = self.leakyrelu(self.lin(a_input))             # (b, k, k, embed_dim)
+            e = torch.matmul(a_input, self.a).squeeze(3)            # (b, k, k)
+        else:
+            Wx = self.lin(x)                                        # (b, k, embed_dim)
+            a_input = self._make_attention_input(Wx)                # (b, k, k, 2*embed_dim)
+            e = self.leakyrelu(torch.matmul(a_input, self.a)).squeeze(3)
+
+        emb_pair = self._make_node_embedding_pair_input(x.device)   # (1, k, k, 2*node_embed_dim)
+        emb_score = self.node_pair_proj(emb_pair).squeeze(3)        # (1, k, k)
+        e = e + emb_score
+
+        if self.use_bias:
+            e = e + self.bias
+
+        sparse_attention = self.sparsemax(e)                        # (b, k, k)
+        attention = torch.dropout(sparse_attention, self.dropout, train=self.training)
+
+        h = self.sigmoid(torch.matmul(attention, x))                # (b, k, n)
+        h = h.permute(0, 2, 1)                                      # (b, n, k)
+
+        if return_sparse_attention:
+            return h, sparse_attention
+        return h
+
+    def _make_attention_input(self, v):
+        K = self.num_nodes
+        blocks_repeating = v.repeat_interleave(K, dim=1)
+        blocks_alternating = v.repeat(1, K, 1)
+        combined = torch.cat((blocks_repeating, blocks_alternating), dim=2)
+
+        if self.use_gatv2:
+            return combined.view(v.size(0), K, K, 2 * self.window_size)
+        return combined.view(v.size(0), K, K, 2 * self.embed_dim)
+
+    def _make_node_embedding_pair_input(self, device):
+        node_ids = torch.arange(self.num_nodes, device=device)
+        emb = self.node_embedding(node_ids).unsqueeze(0)  # (1, k, d)
+        K = self.num_nodes
+        blocks_repeating = emb.repeat_interleave(K, dim=1)
+        blocks_alternating = emb.repeat(1, K, 1)
+        combined = torch.cat((blocks_repeating, blocks_alternating), dim=2)
+        return combined.view(1, K, K, 2 * self.node_embed_dim)
 
 
 class TemporalAttentionLayer(nn.Module):
