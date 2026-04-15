@@ -40,6 +40,15 @@ def get_parser():
     # Reconstruction Model
     parser.add_argument("--recon_n_layers", type=int, default=1)
     parser.add_argument("--recon_hid_dim", type=int, default=150)
+    parser.add_argument(
+        "--recon_model",
+        type=str.lower,
+        default="gru",
+        choices=["gru", "vae"],
+        help="Reconstruction head type. 'gru' (default) matches this repo; 'vae' is closer to MTAD-GAT paper.",
+    )
+    parser.add_argument("--vae_latent_dim", type=int, default=64)
+    parser.add_argument("--kl_beta", type=float, default=0.001, help="Weight for VAE KL term when --recon_model vae")
     # Other
     parser.add_argument("--alpha", type=float, default=0.2)
 

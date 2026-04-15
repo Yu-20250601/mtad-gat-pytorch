@@ -58,17 +58,34 @@ class Predictor:
 
                 if return_attention:
                     model_out = self.model(x, return_sparse_attention=True)
-                    if len(model_out) == 3:
-                        y_hat, _, sparse_attn = model_out
+                    if isinstance(model_out, (tuple, list)) and len(model_out) == 4:
+                        y_hat, _recon, sparse_attn, _kl = model_out
                         attentions.append(sparse_attn.detach().cpu().numpy())
+                    elif isinstance(model_out, (tuple, list)) and len(model_out) == 3:
+                        # Either (preds, recons, sparse_attn) or (preds, recons, kl)
+                        y_hat, second, third = model_out
+                        if torch.is_tensor(third) and third.ndim >= 2:
+                            sparse_attn = third
+                            attentions.append(sparse_attn.detach().cpu().numpy())
+                        else:
+                            # third is KL scalar; ignore for scoring
+                            pass
                     else:
-                        y_hat, _ = model_out
+                        y_hat, _recon = model_out
                 else:
-                    y_hat, _ = self.model(x)
+                    model_out = self.model(x)
+                    if isinstance(model_out, (tuple, list)) and len(model_out) == 3:
+                        y_hat, _recon, _kl = model_out
+                    else:
+                        y_hat, _recon = model_out
 
                 # Shifting input to include the observed value (y) when doing the reconstruction
                 recon_x = torch.cat((x[:, 1:, :], y), dim=1)
-                _, window_recon = self.model(recon_x)
+                recon_out = self.model(recon_x)
+                if isinstance(recon_out, (tuple, list)) and len(recon_out) == 3:
+                    _preds, window_recon, _kl = recon_out
+                else:
+                    _preds, window_recon = recon_out
 
                 preds.append(y_hat.detach().cpu().numpy())
                 # Extract last reconstruction only

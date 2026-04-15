@@ -108,7 +108,12 @@ class Trainer:
                 y = y.to(self.device)
                 self.optimizer.zero_grad()
 
-                preds, recons = self.model(x)
+                model_out = self.model(x)
+                kl = None
+                if isinstance(model_out, (tuple, list)) and len(model_out) == 3:
+                    preds, recons, kl = model_out
+                else:
+                    preds, recons = model_out
 
                 if self.target_dims is not None:
                     x = x[:, :, self.target_dims]
@@ -122,6 +127,9 @@ class Trainer:
                 forecast_loss = torch.sqrt(self.forecast_criterion(y, preds))
                 recon_loss = torch.sqrt(self.recon_criterion(x, recons))
                 loss = forecast_loss + recon_loss
+                if kl is not None:
+                    beta = getattr(self, "kl_beta", 0.001)
+                    loss = loss + beta * kl
 
                 loss.backward()
                 self.optimizer.step()
@@ -201,7 +209,11 @@ class Trainer:
                 x = x.to(self.device)
                 y = y.to(self.device)
 
-                preds, recons = self.model(x)
+                model_out = self.model(x)
+                if isinstance(model_out, (tuple, list)) and len(model_out) == 3:
+                    preds, recons, _kl = model_out
+                else:
+                    preds, recons = model_out
 
                 if self.target_dims is not None:
                     x = x[:, :, self.target_dims]

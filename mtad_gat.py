@@ -9,6 +9,7 @@ from modules import (
     GRULayer,
     Forecasting_Model,
     ReconstructionModel,
+    VAEReconstructionModel,
 )
 
 
@@ -54,6 +55,8 @@ class MTAD_GAT(nn.Module):
         alpha=0.2,
         use_adaptive_sparse_feat_gat=False,
         node_embed_dim=16,
+        recon_model="gru",
+        vae_latent_dim=64,
     ):
         super(MTAD_GAT, self).__init__()
 
@@ -81,7 +84,19 @@ class MTAD_GAT(nn.Module):
         self.temporal_gat = TemporalAttentionLayer(n_features, window_size, dropout, alpha, time_gat_embed_dim, use_gatv2)
         self.gru = GRULayer(3 * n_features, gru_hid_dim, gru_n_layers, dropout)
         self.forecasting_model = Forecasting_Model(gru_hid_dim, forecast_hid_dim, out_dim, forecast_n_layers, dropout)
-        self.recon_model = ReconstructionModel(window_size, gru_hid_dim, recon_hid_dim, out_dim, recon_n_layers, dropout)
+        self.recon_model_type = str(recon_model).lower()
+        if self.recon_model_type == "vae":
+            self.recon_model = VAEReconstructionModel(
+                window_size=window_size,
+                in_dim=gru_hid_dim,
+                hid_dim=recon_hid_dim,
+                latent_dim=vae_latent_dim,
+                out_dim=out_dim,
+                n_layers=recon_n_layers,
+                dropout=dropout,
+            )
+        else:
+            self.recon_model = ReconstructionModel(window_size, gru_hid_dim, recon_hid_dim, out_dim, recon_n_layers, dropout)
 
     def forward(self, x, return_sparse_attention=False):
         # x shape (b, n, k): b - batch size, n - window size, k - number of features
@@ -100,8 +115,16 @@ class MTAD_GAT(nn.Module):
         h_end = h_end.view(x.shape[0], -1)   # Hidden state for last timestamp
 
         predictions = self.forecasting_model(h_end)
-        recons = self.recon_model(h_end)
+        kl = None
+        if self.recon_model_type == "vae":
+            recons, kl = self.recon_model(h_end)
+        else:
+            recons = self.recon_model(h_end)
 
         if sparse_attention is not None:
+            if kl is not None:
+                return predictions, recons, sparse_attention, kl
             return predictions, recons, sparse_attention
+        if kl is not None:
+            return predictions, recons, kl
         return predictions, recons

@@ -445,3 +445,33 @@ class Forecasting_Model(nn.Module):
             x = self.relu(self.layers[i](x))
             x = self.dropout(x)
         return self.layers[-1](x)
+
+
+class VAEReconstructionModel(nn.Module):
+    def __init__(self, window_size, in_dim, hid_dim, latent_dim, out_dim, n_layers, dropout):
+        super(VAEReconstructionModel, self).__init__()
+        self.window_size = window_size
+        self.latent_dim = latent_dim
+
+        self.to_mu = nn.Linear(in_dim, latent_dim)
+        self.to_logvar = nn.Linear(in_dim, latent_dim)
+
+        self.decoder = RNNDecoder(latent_dim, hid_dim, n_layers, dropout)
+        self.fc = nn.Linear(hid_dim, out_dim)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, h_end):
+        mu = self.to_mu(h_end)
+        logvar = self.to_logvar(h_end)
+        z = self.reparameterize(mu, logvar)
+
+        z_rep = z.repeat_interleave(self.window_size, dim=1).view(h_end.size(0), self.window_size, -1)
+        decoder_out = self.decoder(z_rep)
+        out = self.fc(decoder_out)
+
+        kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1).mean()
+        return out, kl

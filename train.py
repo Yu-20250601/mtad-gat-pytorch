@@ -89,6 +89,8 @@ if __name__ == "__main__":
         alpha=args.alpha,
         use_adaptive_sparse_feat_gat=args.use_adaptive_sparse_feat_gat,
         node_embed_dim=args.node_embed_dim,
+        recon_model=args.recon_model,
+        vae_latent_dim=args.vae_latent_dim,
     )
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.init_lr)
@@ -113,6 +115,7 @@ if __name__ == "__main__":
         log_tensorboard,
         args_summary
     )
+    trainer.kl_beta = args.kl_beta
 
     trainer.fit(train_loader, val_loader)
 
