@@ -88,6 +88,8 @@ if __name__ == "__main__":
         dropout=args.dropout,
         alpha=args.alpha,
         use_adaptive_sparse_feat_gat=args.use_adaptive_sparse_feat_gat,
+        attention_type=args.attention_type,
+        use_node_embedding=args.use_node_embedding,
         node_embed_dim=args.node_embed_dim,
         recon_model=args.recon_model,
         vae_latent_dim=args.vae_latent_dim,
