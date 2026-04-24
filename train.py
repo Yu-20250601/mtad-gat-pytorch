@@ -89,6 +89,8 @@ if __name__ == "__main__":
         alpha=args.alpha,
         use_adaptive_sparse_feat_gat=args.use_adaptive_sparse_feat_gat,
         node_embed_dim=args.node_embed_dim,
+        use_node_embedding=args.use_node_embedding,
+        use_sparsemax=args.use_sparsemax,
         recon_model=args.recon_model,
         vae_latent_dim=args.vae_latent_dim,
     )

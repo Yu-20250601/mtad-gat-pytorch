@@ -64,9 +64,12 @@ class FeatureAttentionLayer(nn.Module):
     :param embed_dim: embedding dimension (output dimension of linear transformation)
     :param use_gatv2: whether to use the modified attention mechanism of GATv2 instead of standard GAT
     :param use_bias: whether to include a bias term in the attention layer
+    :param use_node_embedding: whether to use learnable node embeddings
+    :param node_embed_dim: dimension of node embeddings
+    :param use_sparsemax: whether to use sparsemax instead of softmax
     """
 
-    def __init__(self, n_features, window_size, dropout, alpha, embed_dim=None, use_gatv2=True, use_bias=True):
+    def __init__(self, n_features, window_size, dropout, alpha, embed_dim=None, use_gatv2=True, use_bias=True, use_node_embedding=False, node_embed_dim=16, use_sparsemax=False):
         super(FeatureAttentionLayer, self).__init__()
         self.n_features = n_features
         self.window_size = window_size
@@ -75,6 +78,9 @@ class FeatureAttentionLayer(nn.Module):
         self.use_gatv2 = use_gatv2
         self.num_nodes = n_features
         self.use_bias = use_bias
+        self.use_node_embedding = use_node_embedding
+        self.node_embed_dim = node_embed_dim
+        self.use_sparsemax = use_sparsemax
 
         # Because linear transformation is done after concatenation in GATv2
         if self.use_gatv2:
@@ -92,10 +98,18 @@ class FeatureAttentionLayer(nn.Module):
         if self.use_bias:
             self.bias = nn.Parameter(torch.zeros(n_features, n_features))
 
+        if self.use_node_embedding:
+            self.node_embedding = nn.Embedding(n_features, node_embed_dim)
+            self.node_pair_proj = nn.Linear(2 * node_embed_dim, 1, bias=False)
+
         self.leakyrelu = nn.LeakyReLU(alpha)
         self.sigmoid = nn.Sigmoid()
+        if self.use_sparsemax:
+            self.attention_activation = Sparsemax(dim=2)
+        else:
+            self.attention_activation = lambda x: torch.softmax(x, dim=2)
 
-    def forward(self, x):
+    def forward(self, x, return_attention=False):
         # x shape (b, n, k): b - batch size, n - window size, k - number of features
         # For feature attention we represent a node as the values of a particular feature across all timestamps
 
@@ -107,25 +121,41 @@ class FeatureAttentionLayer(nn.Module):
         if self.use_gatv2:
             a_input = self._make_attention_input(x)                 # (b, k, k, 2*window_size)
             a_input = self.leakyrelu(self.lin(a_input))             # (b, k, k, embed_dim)
-            e = torch.matmul(a_input, self.a).squeeze(3)            # (b, k, k, 1)
+            e = torch.matmul(a_input, self.a).squeeze(3)            # (b, k, k)
 
         # Original GAT attention
         else:
-            Wx = self.lin(x)                                                  # (b, k, k, embed_dim)
-            a_input = self._make_attention_input(Wx)                          # (b, k, k, 2*embed_dim)
-            e = self.leakyrelu(torch.matmul(a_input, self.a)).squeeze(3)      # (b, k, k, 1)
+            Wx = self.lin(x)                                        # (b, k, embed_dim)
+            a_input = self._make_attention_input(Wx)                # (b, k, k, 2*embed_dim)
+            e = self.leakyrelu(torch.matmul(a_input, self.a)).squeeze(3)  # (b, k, k)
+
+        if self.use_node_embedding:
+            emb_pair = self._make_node_embedding_pair_input(x.device)   # (1, k, k, 2*node_embed_dim)
+            emb_score = self.node_pair_proj(emb_pair).squeeze(3)        # (1, k, k)
+            e = e + emb_score
 
         if self.use_bias:
             e += self.bias
 
         # Attention weights
-        attention = torch.softmax(e, dim=2)
+        attention = self.attention_activation(e)
         attention = torch.dropout(attention, self.dropout, train=self.training)
 
         # Computing new node features using the attention
         h = self.sigmoid(torch.matmul(attention, x))
 
+        if return_attention:
+            return h.permute(0, 2, 1), attention
         return h.permute(0, 2, 1)
+
+    def _make_node_embedding_pair_input(self, device):
+        node_ids = torch.arange(self.num_nodes, device=device)
+        emb = self.node_embedding(node_ids).unsqueeze(0)  # (1, k, d)
+        K = self.num_nodes
+        blocks_repeating = emb.repeat_interleave(K, dim=1)
+        blocks_alternating = emb.repeat(1, K, 1)
+        combined = torch.cat((blocks_repeating, blocks_alternating), dim=2)
+        return combined.view(1, K, K, 2 * self.node_embed_dim)
 
     def _make_attention_input(self, v):
         """Preparing the feature attention mechanism.

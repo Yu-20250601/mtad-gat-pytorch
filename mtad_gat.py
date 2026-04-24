@@ -55,6 +55,8 @@ class MTAD_GAT(nn.Module):
         alpha=0.2,
         use_adaptive_sparse_feat_gat=False,
         node_embed_dim=16,
+        use_node_embedding=False,
+        use_sparsemax=False,
         recon_model="gru",
         vae_latent_dim=64,
     ):
@@ -74,12 +76,15 @@ class MTAD_GAT(nn.Module):
             )
         else:
             self.feature_gat = FeatureAttentionLayer(
-                n_features,
-                window_size,
-                dropout,
-                alpha,
-                feat_gat_embed_dim,
-                use_gatv2,
+                n_features=n_features,
+                window_size=window_size,
+                dropout=dropout,
+                alpha=alpha,
+                embed_dim=feat_gat_embed_dim,
+                use_gatv2=use_gatv2,
+                use_node_embedding=use_node_embedding,
+                node_embed_dim=node_embed_dim,
+                use_sparsemax=use_sparsemax,
             )
         self.temporal_gat = TemporalAttentionLayer(n_features, window_size, dropout, alpha, time_gat_embed_dim, use_gatv2)
         self.gru = GRULayer(3 * n_features, gru_hid_dim, gru_n_layers, dropout)

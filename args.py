@@ -31,6 +31,8 @@ def get_parser():
     parser.add_argument("--time_gat_embed_dim", type=int, default=None)
     parser.add_argument("--use_adaptive_sparse_feat_gat", type=str2bool, default=False)
     parser.add_argument("--node_embed_dim", type=int, default=16)
+    parser.add_argument("--use_node_embedding", type=str2bool, default=False)
+    parser.add_argument("--use_sparsemax", type=str2bool, default=False)
     # GRU layer
     parser.add_argument("--gru_n_layers", type=int, default=1)
     parser.add_argument("--gru_hid_dim", type=int, default=150)
