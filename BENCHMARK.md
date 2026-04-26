@@ -43,6 +43,21 @@ python preprocess.py --dataset SMAP
 
 ## 常用命令
 
+如果你想先筛选“主模型”，建议直接使用新增的 `select_main_model.py`。
+
+例如，在 `SMD 1-1` 上快速比较 4 个候选版本：
+
+```bash
+python select_main_model.py --datasets SMD --smd_groups 1-1 --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node --max_train_size 4000 --max_test_size 20000 --mtad_epochs 5
+```
+
+它会：
+
+- 自动调用 `benchmark_models.py`
+- 汇总每个候选模型的 `epsilon_f1 / pot_f1 / bf_f1`
+- 生成 `leaderboard.csv`
+- 输出推荐主模型
+
 先做一个小规模快速验证，只跑 SMD 的 3 台机器：
 
 ```bash

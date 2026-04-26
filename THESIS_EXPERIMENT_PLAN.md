@@ -94,7 +94,7 @@
 先不要跑全量数据，先做小样本验证：
 
 ```bash
-python benchmark_models.py --datasets SMD --smd_groups 1-1 --models mtad_gat_vae,mtad_gat_vae_node,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node --max_train_size 4000 --max_test_size 4000 --mtad_epochs 5
+python select_main_model.py --datasets SMD --smd_groups 1-1 --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node --max_train_size 4000 --max_test_size 20000 --mtad_epochs 5
 ```
 
 目的：
@@ -206,4 +206,3 @@ python benchmark_models.py --datasets SMD --smd_groups all --models mtad_gat_gru
 - 主实验跑 `pca + isolation_forest + mtad_gat_gru + mtad_gat_vae + mtad_gat_sparsemax_vae`
 - 先用小样本判断 `node embedding` 要不要保留
 - 根因分析只做你自己的最终模型
-
