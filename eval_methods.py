@@ -73,6 +73,29 @@ def calc_point2point(predict, actual):
     return f1, precision, recall, TP, TN, FP, FN
 
 
+def _find_safe_pot_level(init_score, level, min_peaks=3):
+    """Find a POT initialization level that yields at least a few peaks."""
+
+    init_score = np.asarray(init_score)
+    if init_score.size == 0:
+        raise ValueError("init_score must not be empty")
+
+    n_init = init_score.size
+    sorted_scores = np.sort(init_score)
+    safe_level = float(level)
+
+    while True:
+        safe_level = min(max(safe_level, 0.0), 1.0 - 1.0 / max(n_init, 2))
+        idx = min(max(int(safe_level * n_init), 0), n_init - 1)
+        init_threshold = sorted_scores[idx]
+        n_peaks = int(np.sum(init_score > init_threshold))
+        if n_peaks >= min_peaks or idx <= 0:
+            return safe_level, float(init_threshold), n_peaks
+
+        # Move the empirical quantile downward until there are enough exceedances.
+        safe_level = max(0.0, (idx - min_peaks) / n_init)
+
+
 def pot_eval(init_score, score, label, q=1e-3, level=0.99, dynamic=False):
     """
     Run POT method on given score.
@@ -88,15 +111,35 @@ def pot_eval(init_score, score, label, q=1e-3, level=0.99, dynamic=False):
     """
 
     print(f"Running POT with q={q}, level={level}..")
+    safe_level, fallback_threshold, n_peaks = _find_safe_pot_level(init_score, level)
+    if safe_level != level:
+        print(
+            "POT initialization level adjusted from "
+            f"{level} to {safe_level:.6f} because the original level produced too few peaks "
+            f"(current peaks: {n_peaks})."
+        )
+
     s = SPOT(q)  # SPOT object
     s.fit(init_score, score)
-    s.initialize(level=level, min_extrema=False)  # Calibration step
-    ret = s.run(dynamic=dynamic, with_alarm=False)
+    try:
+        s.initialize(level=safe_level, min_extrema=False)  # Calibration step
+        ret = s.run(dynamic=dynamic, with_alarm=False)
 
-    print(len(ret["alarms"]))
-    print(len(ret["thresholds"]))
+        print(len(ret["alarms"]))
+        print(len(ret["thresholds"]))
 
-    pot_th = np.mean(ret["thresholds"])
+        thresholds = ret["thresholds"]
+        if len(thresholds) == 0:
+            raise ValueError("POT returned no thresholds.")
+        pot_th = np.mean(thresholds)
+    except Exception as exc:
+        print(
+            "POT failed during calibration or inference; "
+            f"falling back to empirical threshold {fallback_threshold:.6f}. "
+            f"Reason: {exc}"
+        )
+        pot_th = fallback_threshold
+
     pred, p_latency = adjust_predicts(score, label, pot_th, calc_latency=True)
     if label is not None:
         p_t = calc_point2point(pred, label)
