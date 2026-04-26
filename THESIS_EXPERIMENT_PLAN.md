@@ -1,208 +1,365 @@
-# 本科论文实验清单建议
+﻿# 论文实验计划
 
-适用题目：
+## 当前结论
 
-`基于深度学习的多元时间序列异常检测与根因分析`
+- 当前主实验数据固定为 SMD 的 4 组机器：`1-2`、`1-3`、`2-1`、`3-6`
+- 当前主模型方向：`mtad_gat_vae`
+- 后续实验默认设置：`--use_gatv2 true`
+- 论文中的指标使用建议：
+  - 主指标：`bf_result` 的 F1
+  - 辅指标：`epsilon_result` 的 F1
+  - 补充分析：`pot_result` 的 F1
 
-本文档的目标不是“把所有模型都跑一遍”，而是帮助你在时间有限的情况下，完成一套：
+## 数据选择依据
 
-- 能支撑论文主线
-- 实现成本低
-- 对答辩友好
-- 能按时收尾
+论文主实验使用 SMD 的 `1-2`、`1-3`、`2-1`、`3-6` 四组机器。
 
-的实验方案。
+选择标准：
 
-## 一、最终建议跑哪些模型
+- 覆盖不同 SMD 大组：`1-*`、`2-*`、`3-*`
+- 避开异常过于稀疏或过于容易的极端机器
+- 保证异常比例和异常片段数量处于相对适中的范围
+- 在保证代表性的同时，控制实验规模，方便后续稳定复现实验
 
-如果你的时间比较紧，我建议主对比实验先跑下面 5 个模型：
+可直接写入论文的方法描述：
 
-- `pca`
-- `isolation_forest`
-- `mtad_gat_gru`
-- `mtad_gat_vae`
-- `mtad_gat_sparsemax_vae`
+> 本文从 SMD 数据集中选取 `1-2`、`1-3`、`2-1` 和 `3-6` 四组具有代表性的机器进行实验。所选机器覆盖不同 machine group，并尽量避免异常过于稀疏或过于简单的极端情况，以保证实验的代表性与稳定性。
 
-这 5 个模型已经足够形成一条完整的论文叙事：
+## 待做事项
 
-- `pca`：传统线性方法基线
-- `isolation_forest`：传统无监督机器学习基线
-- `mtad_gat_gru`：原仓库默认实现基线
-- `mtad_gat_vae`：更接近论文设定的 MTAD-GAT 基线
-- `mtad_gat_sparsemax_vae`：你的改进模型候选
-
-## 二、什么时候再加 node embedding
-
-如果你先做一轮小规模实验后，发现 `node embedding` 有稳定提升，再把它加入正式主实验。
-
-建议比较的版本：
-
-- `mtad_gat_vae`
-- `mtad_gat_vae_node`
-- `mtad_gat_sparsemax_vae`
-- `mtad_gat_sparsemax_vae_node`
-
-如果 `node embedding` 的提升不明显，或者只在单个数据集上有效，那么：
-
-- 主对比实验里可以不放它
-- 只在消融实验里报告即可
-
-这在本科论文中是完全合理的。
-
-## 三、GDN 要不要跑
-
-如果你还有时间，并且想补一个“图模型外部基线”，再加：
-
-- `gdn`
-
-但如果时间明显不够，`gdn` 不是必须项。
-
-优先级上，我建议：
-
-1. 先确保 `pca / isolation_forest / mtad_gat_gru / mtad_gat_vae / mtad_gat_sparsemax_vae` 跑完
-2. 再考虑是否补 `gdn`
-
-## 四、推荐的数据集优先级
-
-如果时间很紧，优先级建议如下：
-
-1. `SMD`
-2. `MSL`
-3. `SMAP`
-
-原因：
-
-- `SMD` 是工业多变量场景里最常用的数据集之一，论文说服力强
-- `MSL` 和 `SMAP` 常被一起使用，适合作为跨数据集补充验证
-
-如果你只能做一个数据集：
-
-- 首选 `SMD`
-
-如果能做两个：
-
-- `SMD + MSL`
-
-如果时间足够再做完整版本：
-
-- `SMD + MSL + SMAP`
-
-## 五、推荐的实验顺序
-
-### 第一步：快速筛选最终模型
-
-先不要跑全量数据，先做小样本验证：
-
-```bash
-python select_main_model.py --datasets SMD --smd_groups 1-1 --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node --max_train_size 4000 --max_test_size 20000 --mtad_epochs 5
-```
+### 1. 主模型比较实验
 
 目的：
 
-- 看 `sparsemax` 是否有效
-- 看 `node embedding` 是否有效
-- 决定“你的最终模型”到底是哪一个
+- 在选定的 4 组 SMD 机器上比较主要 MTAD-GAT 变体
+- 确认后续论文主模型是否定为 `mtad_gat_vae`
 
-### 第二步：跑正式主对比实验
-
-如果 `node embedding` 没明显提升，推荐正式实验直接跑：
+运行命令：
 
 ```bash
-python benchmark_models.py --datasets SMD,MSL,SMAP --smd_groups all --models pca,isolation_forest,mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae
+python benchmark_models.py \
+  --datasets SMD \
+  --smd_groups 1-2,1-3,2-1,3-6 \
+  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
+  --max_train_size 10000 \
+  --max_test_size 20000 \
+  --mtad_epochs 15 \
+  --batch_size 256 \
+  --use_gatv2 true \
+  --seed 42
 ```
 
-如果 `node embedding` 提升稳定，则改成：
+需要得到的结果：
+
+- 每台机器上每个模型的 `F1 / Precision / Recall`
+- 每个模型对应的 `bf_result / epsilon_result / pot_result`
+- 4 台机器上的平均表现
+- 最终主模型结论
+
+本实验需要保留：
+
+- `benchmark_results.csv`
+- `best_per_entity.csv`
+- 各模型目录下的 `metrics.json`
+
+### 2. 多随机种子稳定性验证
+
+目的：
+
+- 验证模型排序不是单次随机结果造成的
+- 判断 `mtad_gat_vae` 是否仍然是整体最均衡的选择
+
+运行命令：
 
 ```bash
-python benchmark_models.py --datasets SMD,MSL,SMAP --smd_groups all --models pca,isolation_forest,mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae_node
+python benchmark_models.py \
+  --datasets SMD \
+  --smd_groups 1-2,1-3,2-1,3-6 \
+  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
+  --max_train_size 10000 \
+  --max_test_size 20000 \
+  --mtad_epochs 15 \
+  --batch_size 256 \
+  --use_gatv2 true \
+  --seed 42
 ```
-
-### 第三步：补消融实验
-
-推荐至少做以下 3 组消融：
-
-1. `GRU vs VAE`
-2. `softmax vs sparsemax`
-3. `node embedding off/on`
-
-对应模型可以直接这样跑：
 
 ```bash
-python benchmark_models.py --datasets SMD --smd_groups all --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node
+python benchmark_models.py \
+  --datasets SMD \
+  --smd_groups 1-2,1-3,2-1,3-6 \
+  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
+  --max_train_size 10000 \
+  --max_test_size 20000 \
+  --mtad_epochs 15 \
+  --batch_size 256 \
+  --use_gatv2 true \
+  --seed 52
 ```
 
-## 六、根因分析建议
+```bash
+python benchmark_models.py \
+  --datasets SMD \
+  --smd_groups 1-2,1-3,2-1,3-6 \
+  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
+  --max_train_size 10000 \
+  --max_test_size 20000 \
+  --mtad_epochs 15 \
+  --batch_size 256 \
+  --use_gatv2 true \
+  --seed 62
+```
 
-如果时间不多，根因分析部分可以只做你自己的最终模型，不和其他模型做对比。
+需要得到的结果：
 
-建议写法：
+- 每个模型 `bf_result` F1 的 `mean +- std`
+- 每个模型 `epsilon_result` F1 的 `mean +- std`
+- 各机器上的稳定性观察
+- 主模型结论是否跨 seed 保持一致
 
-- “本文对所提出模型的根因定位能力进行案例分析”
+本实验需要保留：
 
-不建议写法：
+- 三次运行的 `benchmark_results.csv`
+- 三次运行的 `run_config.json`
+- 最终手工汇总或脚本汇总后的均值标准差表
 
-- “本文证明所提模型的根因分析能力优于所有对比模型”
+### 3. 结构消融实验
 
-因为 `SMD / MSL / SMAP` 更适合做异常检测评测，而不是严格的根因分析量化比较。
+目的：
 
-### 根因分析部分建议展示的内容
+- 解释为什么最终选择该主模型
+- 量化 VAE 重构头、Sparsemax 注意力、Node Embedding 三部分的作用
 
-选择 3 到 5 个异常片段，展示：
+参与对比的模型：
 
-- 全局异常分数曲线
-- 异常片段前后的原始多变量曲线
-- top-k 可疑变量排名
-- sparse attention 或 feature attention 热图
-- 如果启用了 node embedding，可补充变量间关联解释
-
-## 七、论文里可以怎么定义 baseline
-
-推荐这样写：
-
-- `mtad_gat_gru`：原仓库默认实现基线
-- `mtad_gat_vae`：更接近原论文设定的 MTAD-GAT 基线
-
-这样最稳妥，也最容易回答老师的问题：
-
-- 为什么同时有两个 MTAD-GAT baseline？
-
-答案是：
-
-- 一个对应当前工程实现
-- 一个对应更接近原论文的方法设定
-
-## 八、最推荐的最终版本
-
-如果我替你做最终定稿选择，我会推荐：
-
-### 主对比实验
-
-- `pca`
-- `isolation_forest`
 - `mtad_gat_gru`
 - `mtad_gat_vae`
 - `mtad_gat_sparsemax_vae`
-
-### 可选补充
-
 - `mtad_gat_sparsemax_vae_node`
-- `gdn`
 
-### 消融实验
+说明：
+
+- 本实验可以直接复用“多随机种子稳定性验证”的结果
+- 如果第 2 步做完，这一步通常不需要额外重新跑
+
+需要得到的结果：
+
+- `GRU -> VAE` 的效果变化
+- `VAE -> Sparsemax VAE` 的效果变化
+- `Sparsemax VAE -> Sparsemax VAE + Node Embedding` 的效果变化
+- 每个组件作用的一段简洁文字结论
+
+本实验需要产出：
+
+- 一张消融表
+- 一段模块贡献分析文字
+
+### 4. GATv2 消融实验
+
+目的：
+
+- 验证 `use_gatv2=true` 是否确实优于 `use_gatv2=false`
+
+建议设置：
+
+- 只在主模型 `mtad_gat_vae` 上做
+- 其他设置完全保持不变
+
+运行命令：
+
+```bash
+python benchmark_models.py \
+  --datasets SMD \
+  --smd_groups 1-2,1-3,2-1,3-6 \
+  --models mtad_gat_vae \
+  --max_train_size 10000 \
+  --max_test_size 20000 \
+  --mtad_epochs 15 \
+  --batch_size 256 \
+  --use_gatv2 true \
+  --seed 42
+```
+
+```bash
+python benchmark_models.py \
+  --datasets SMD \
+  --smd_groups 1-2,1-3,2-1,3-6 \
+  --models mtad_gat_vae \
+  --max_train_size 10000 \
+  --max_test_size 20000 \
+  --mtad_epochs 15 \
+  --batch_size 256 \
+  --use_gatv2 false \
+  --seed 42
+```
+
+需要得到的结果：
+
+- `use_gatv2=true` 与 `use_gatv2=false` 的 `bf_result` F1 对比
+- `use_gatv2=true` 与 `use_gatv2=false` 的 `epsilon_result` F1 对比
+- 各机器及平均表现差异
+
+本实验需要产出：
+
+- 一张 GATv2 消融表
+- 一段关于是否保留 `use_gatv2=true` 的结论
+
+### 5. 定性案例与可视化实验
+
+目的：
+
+- 为论文提供直观图示
+- 展示模型如何定位异常片段
+
+建议选取的机器：
+
+- `1-3`：适合展示模型差异
+- `2-1` 或 `3-6`：适合展示相对稳定、清晰的检测结果
+
+建议对比的模型：
+
+- `mtad_gat_gru`
+- `mtad_gat_vae`
+
+需要得到的结果：
+
+- 异常分数随时间变化曲线
+- 真实异常区间
+- 阈值线
+- 2 到 4 个有代表性的案例图
+
+本实验需要产出：
+
+- 2 到 4 张最终论文插图
+- 一段案例分析文字
+
+## 每次实验必须保存的结果文件
+
+每次实验完成后，建议至少保留：
+
+- `run_config.json`
+- `benchmark_results.csv`
+- `best_per_entity.csv`
+- 各模型目录下的 `metrics.json`
+- 若有可视化结果，也保存对应图片或中间分数文件
+
+## 最终需要汇总出的结果
+
+全部实验完成后，需要整理出以下内容：
+
+- 主模型比较总表
+- 多 seed 稳定性汇总表
+- 结构消融汇总表
+- GATv2 消融汇总表
+- 最终案例可视化图
+
+## 论文中建议放入的表格
+
+### 表 1：主模型比较表
+
+建议内容：
+
+- 行：`mtad_gat_gru`、`mtad_gat_vae`、`mtad_gat_sparsemax_vae`、`mtad_gat_sparsemax_vae_node`
+- 列：`1-2`、`1-3`、`2-1`、`3-6`、`Average`
+- 指标：以 `bf_result` F1 为主
+
+作用：
+
+- 展示所选 4 组机器上的主对比结果
+
+### 表 2：稳定性表
+
+建议内容：
+
+- 行：4 个 MTAD-GAT 变体
+- 列：`bf_result mean +- std`、`epsilon_result mean +- std`
+
+作用：
+
+- 展示不同模型跨 seed 的稳定性
+
+### 表 3：结构消融表
+
+建议内容：
 
 - `mtad_gat_gru`
 - `mtad_gat_vae`
 - `mtad_gat_sparsemax_vae`
 - `mtad_gat_sparsemax_vae_node`
 
-### 根因分析
+作用：
 
-- 只分析你最终选定的模型
+- 解释各结构组件的贡献
 
-## 九、一句话版建议
+### 表 4：GATv2 消融表
 
-如果你现在时间真的不多，就照这个最小可行方案做：
+建议内容：
 
-- 主实验跑 `pca + isolation_forest + mtad_gat_gru + mtad_gat_vae + mtad_gat_sparsemax_vae`
-- 先用小样本判断 `node embedding` 要不要保留
-- 根因分析只做你自己的最终模型
+- `mtad_gat_vae + use_gatv2=false`
+- `mtad_gat_vae + use_gatv2=true`
+
+作用：
+
+- 说明保留 `use_gatv2=true` 的依据
+
+## 论文中建议放入的图片
+
+### 图 1：主模型异常分数图
+
+建议内容：
+
+- 机器：`1-3`
+- 模型：`mtad_gat_vae`
+- 展示 anomaly score、threshold、真实异常区间
+
+作用：
+
+- 直观展示主模型对异常片段的检测效果
+
+### 图 2：模型对比例图
+
+建议内容：
+
+- 同一台机器上，对比 `mtad_gat_gru` 与 `mtad_gat_vae`
+
+作用：
+
+- 展示主模型相较基础模型的优势
+
+### 图 3：GATv2 消融柱状图
+
+建议内容：
+
+- 对比 `use_gatv2=true` 与 `use_gatv2=false`
+
+作用：
+
+- 直观说明 GATv2 的作用
+
+### 图 4：平均性能柱状图
+
+建议内容：
+
+- 4 个模型在 4 台机器上的平均 F1
+
+作用：
+
+- 给出整体性能排序的直观展示
+
+## 推荐执行顺序
+
+1. 完成 3 个 seed 的主实验比较
+2. 直接复用结果整理结构消融表
+3. 跑 `mtad_gat_vae` 的 GATv2 消融实验
+4. 生成 `1-3` 与 `2-1` 或 `3-6` 的案例图
+5. 将表格和图整理进论文正文
+
+## 最小可交付版本
+
+如果时间比较紧，最小可交付实验包应包括：
+
+- 一组主模型比较实验：`1-2,1-3,2-1,3-6`
+- 三个 seed 的稳定性验证
+- 一组 `mtad_gat_vae` 的 GATv2 消融实验
+- 两张定性案例图
+- 四张核心表格
