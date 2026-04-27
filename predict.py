@@ -119,6 +119,10 @@ if __name__ == "__main__":
         alpha=model_args.alpha,
         use_adaptive_sparse_feat_gat=getattr(model_args, "use_adaptive_sparse_feat_gat", False),
         node_embed_dim=getattr(model_args, "node_embed_dim", 16),
+        use_node_embedding=getattr(model_args, "use_node_embedding", False),
+        use_sparsemax=getattr(model_args, "use_sparsemax", False),
+        recon_model=getattr(model_args, "recon_model", "gru"),
+        vae_latent_dim=getattr(model_args, "vae_latent_dim", 64),
     )
 
     device = "cuda" if args.use_cuda and torch.cuda.is_available() else "cpu"

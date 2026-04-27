@@ -107,9 +107,12 @@ class MTAD_GAT(nn.Module):
         # x shape (b, n, k): b - batch size, n - window size, k - number of features
 
         x = self.conv(x)
-        sparse_attention = None
-        if self.use_adaptive_sparse_feat_gat and return_sparse_attention:
-            h_feat, sparse_attention = self.feature_gat(x, return_sparse_attention=True)
+        feature_attention = None
+        if return_sparse_attention:
+            if self.use_adaptive_sparse_feat_gat:
+                h_feat, feature_attention = self.feature_gat(x, return_sparse_attention=True)
+            else:
+                h_feat, feature_attention = self.feature_gat(x, return_attention=True)
         else:
             h_feat = self.feature_gat(x)
         h_temp = self.temporal_gat(x)
@@ -126,10 +129,10 @@ class MTAD_GAT(nn.Module):
         else:
             recons = self.recon_model(h_end)
 
-        if sparse_attention is not None:
+        if feature_attention is not None:
             if kl is not None:
-                return predictions, recons, sparse_attention, kl
-            return predictions, recons, sparse_attention
+                return predictions, recons, feature_attention, kl
+            return predictions, recons, feature_attention
         if kl is not None:
             return predictions, recons, kl
         return predictions, recons

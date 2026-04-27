@@ -3,10 +3,14 @@ import json
 import os
 import re
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+
+REPO_ROOT = Path(__file__).resolve().parent
 
 
 def parse_args():
@@ -46,6 +50,15 @@ def get_latest_target_dir(base_dir):
 
 
 def load_summary_metrics(target_dir):
+    summary = load_latest_summary(target_dir)
+    if summary is None:
+        return None, None, None
+
+    epsilon = summary.get("epsilon_result", {})
+    return epsilon.get("f1"), epsilon.get("precision"), epsilon.get("recall")
+
+
+def load_latest_summary(target_dir):
     summary_files = []
     for name in os.listdir(target_dir):
         if name.startswith("summary") and name.endswith(".txt"):
@@ -53,20 +66,18 @@ def load_summary_metrics(target_dir):
 
     if not summary_files:
         warnings.warn("No summary*.txt found under {}".format(target_dir))
-        return None, None, None
+        return None
 
     summary_files.sort(key=os.path.getmtime, reverse=True)
     for summary_path in summary_files:
         try:
             with open(summary_path, "r") as f:
-                summary = json.load(f)
-            epsilon = summary.get("epsilon_result", {})
-            return epsilon.get("f1"), epsilon.get("precision"), epsilon.get("recall")
+                return json.load(f)
         except Exception:
             continue
 
     warnings.warn("No valid JSON summary file found under {}".format(target_dir))
-    return None, None, None
+    return None
 
 
 def resolve_label_path(dataset, group):
@@ -75,19 +86,26 @@ def resolve_label_path(dataset, group):
         if group is None:
             warnings.warn("SMD requires --group to locate interpretation labels.")
             return None
-        # User-specified preferred path
-        preferred = "/root/mtad/datasets/SMD/interpretation_label/machine-{}.txt".format(group)
-        if os.path.isfile(preferred):
-            return preferred
-        # Compatibility fallback for this repository layout
-        fallback = "/root/mtad/datasets/ServerMachineDataset/interpretation_label/machine-{}.txt".format(group)
-        if os.path.isfile(fallback):
-            return fallback
+        candidates = [
+            REPO_ROOT / "datasets" / "ServerMachineDataset" / "interpretation_label" / f"machine-{group}.txt",
+            REPO_ROOT / "datasets" / "SMD" / "interpretation_label" / f"machine-{group}.txt",
+            Path("/root/mtad/datasets/SMD/interpretation_label") / f"machine-{group}.txt",
+            Path("/root/mtad/datasets/ServerMachineDataset/interpretation_label") / f"machine-{group}.txt",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
         return None
 
-    preferred = "/root/mtad/datasets/{0}/{0}_interpretation_label.txt".format(dataset)
-    if os.path.isfile(preferred):
-        return preferred
+    candidates = [
+        REPO_ROOT / "datasets" / ds_upper / f"{ds_upper}_interpretation_label.txt",
+        REPO_ROOT / "datasets" / ds_upper / "interpretation_label" / f"{ds_upper}_interpretation_label.txt",
+        Path("/root/mtad/datasets") / ds_upper / f"{ds_upper}_interpretation_label.txt",
+        Path("/root/mtad/datasets") / ds_upper / "interpretation_label" / f"{ds_upper}_interpretation_label.txt",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
     return None
 
 
@@ -285,7 +303,7 @@ def plot_sparse_heatmap(target_dir):
     set_publication_style()
     fig, ax = plt.subplots(figsize=(7, 6))
     im = ax.imshow(mat, cmap="viridis", aspect="auto")
-    ax.set_title("Adaptive Sparse Feature Correlation", fontsize=14)
+    ax.set_title("Feature Attention Heatmap", fontsize=14)
     ax.set_xlabel("Source Sensor", fontsize=12)
     ax.set_ylabel("Target Sensor", fontsize=12)
     cbar = fig.colorbar(im, ax=ax)
