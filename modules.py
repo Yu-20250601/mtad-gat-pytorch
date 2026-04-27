@@ -173,6 +173,7 @@ class AdaptiveSparseGAT(nn.Module):
         embed_dim=None,
         use_gatv2=True,
         use_bias=True,
+        use_node_embedding=True,
         node_embed_dim=16,
     ):
         super(AdaptiveSparseGAT, self).__init__()
@@ -183,6 +184,7 @@ class AdaptiveSparseGAT(nn.Module):
         self.use_gatv2 = use_gatv2
         self.num_nodes = n_features
         self.use_bias = use_bias
+        self.use_node_embedding = use_node_embedding
         self.node_embed_dim = node_embed_dim
 
         if self.use_gatv2:
@@ -200,8 +202,12 @@ class AdaptiveSparseGAT(nn.Module):
         if self.use_bias:
             self.bias = nn.Parameter(torch.zeros(n_features, n_features))
 
-        self.node_embedding = nn.Embedding(n_features, node_embed_dim)
-        self.node_pair_proj = nn.Linear(2 * node_embed_dim, 1, bias=False)
+        if self.use_node_embedding:
+            self.node_embedding = nn.Embedding(n_features, node_embed_dim)
+            self.node_pair_proj = nn.Linear(2 * node_embed_dim, 1, bias=False)
+        else:
+            self.node_embedding = None
+            self.node_pair_proj = None
 
         self.leakyrelu = nn.LeakyReLU(alpha)
         self.sparsemax = Sparsemax(dim=2)
@@ -221,9 +227,10 @@ class AdaptiveSparseGAT(nn.Module):
             a_input = self._make_attention_input(Wx)                # (b, k, k, 2*embed_dim)
             e = self.leakyrelu(torch.matmul(a_input, self.a)).squeeze(3)
 
-        emb_pair = self._make_node_embedding_pair_input(x.device)   # (1, k, k, 2*node_embed_dim)
-        emb_score = self.node_pair_proj(emb_pair).squeeze(3)        # (1, k, k)
-        e = e + emb_score
+        if self.use_node_embedding:
+            emb_pair = self._make_node_embedding_pair_input(x.device)   # (1, k, k, 2*node_embed_dim)
+            emb_score = self.node_pair_proj(emb_pair).squeeze(3)        # (1, k, k)
+            e = e + emb_score
 
         if self.use_bias:
             e = e + self.bias
@@ -249,6 +256,8 @@ class AdaptiveSparseGAT(nn.Module):
         return combined.view(v.size(0), K, K, 2 * self.embed_dim)
 
     def _make_node_embedding_pair_input(self, device):
+        if not self.use_node_embedding:
+            raise RuntimeError("Node embedding is disabled for this AdaptiveSparseGAT instance.")
         node_ids = torch.arange(self.num_nodes, device=device)
         emb = self.node_embedding(node_ids).unsqueeze(0)  # (1, k, d)
         K = self.num_nodes

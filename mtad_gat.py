@@ -54,6 +54,7 @@ class MTAD_GAT(nn.Module):
         dropout=0.2,
         alpha=0.2,
         use_adaptive_sparse_feat_gat=False,
+        use_node_embedding=True,
         node_embed_dim=16,
         recon_model="gru",
         vae_latent_dim=64,
@@ -70,6 +71,7 @@ class MTAD_GAT(nn.Module):
                 alpha=alpha,
                 embed_dim=feat_gat_embed_dim,
                 use_gatv2=use_gatv2,
+                use_node_embedding=use_node_embedding,
                 node_embed_dim=node_embed_dim,
             )
         else:

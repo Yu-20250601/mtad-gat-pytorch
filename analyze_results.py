@@ -14,6 +14,12 @@ def parse_args():
     parser.add_argument("--dataset", type=str, required=True, help="Dataset name, e.g. SMD, WADI, MSL")
     parser.add_argument("--group", type=str, default=None, help="Optional group, e.g. 1-1")
     parser.add_argument(
+        "--label_path",
+        type=str,
+        default=None,
+        help="Optional explicit interpretation label file path for RCA evaluation.",
+    )
+    parser.add_argument(
         "--target_dir",
         type=str,
         default=None,
@@ -26,6 +32,10 @@ def get_base_dir(dataset, group):
     if group:
         return os.path.join("output", dataset, group)
     return os.path.join("output", dataset)
+
+
+def get_repo_root():
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 def get_latest_target_dir(base_dir):
@@ -69,25 +79,53 @@ def load_summary_metrics(target_dir):
     return None, None, None
 
 
-def resolve_label_path(dataset, group):
+def infer_group_from_target_dir(dataset, group, target_dir):
+    if group is not None or dataset.upper() != "SMD" or target_dir is None:
+        return group
+
+    normalized = os.path.normpath(target_dir)
+    parts = normalized.split(os.sep)
+    for i, part in enumerate(parts[:-1]):
+        if part.upper() == "SMD" and i + 1 < len(parts):
+            candidate = parts[i + 1]
+            if re.match(r"^\d+-\d+$", candidate):
+                return candidate
+    return group
+
+
+def resolve_label_path(dataset, group, label_path_override=None):
+    if label_path_override is not None:
+        if os.path.isfile(label_path_override):
+            return label_path_override
+        warnings.warn("Provided label path does not exist: {}".format(label_path_override))
+        return None
+
     ds_upper = dataset.upper()
+    repo_root = get_repo_root()
     if ds_upper == "SMD":
         if group is None:
             warnings.warn("SMD requires --group to locate interpretation labels.")
             return None
-        # User-specified preferred path
-        preferred = "/root/mtad/datasets/SMD/interpretation_label/machine-{}.txt".format(group)
-        if os.path.isfile(preferred):
-            return preferred
-        # Compatibility fallback for this repository layout
-        fallback = "/root/mtad/datasets/ServerMachineDataset/interpretation_label/machine-{}.txt".format(group)
-        if os.path.isfile(fallback):
-            return fallback
+
+        candidate_paths = [
+            os.path.join(repo_root, "datasets", "ServerMachineDataset", "interpretation_label", "machine-{}.txt".format(group)),
+            os.path.join(repo_root, "datasets", "SMD", "interpretation_label", "machine-{}.txt".format(group)),
+            os.path.join("/root/mtad/datasets/SMD/interpretation_label", "machine-{}.txt".format(group)),
+            os.path.join("/root/mtad/datasets/ServerMachineDataset/interpretation_label", "machine-{}.txt".format(group)),
+        ]
+        for candidate in candidate_paths:
+            if os.path.isfile(candidate):
+                return candidate
         return None
 
-    preferred = "/root/mtad/datasets/{0}/{0}_interpretation_label.txt".format(dataset)
-    if os.path.isfile(preferred):
-        return preferred
+    candidate_paths = [
+        os.path.join(repo_root, "datasets", "data", "{}_interpretation_label.txt".format(dataset.lower())),
+        os.path.join(repo_root, "datasets", ds_upper, "{}_interpretation_label.txt".format(ds_upper)),
+        os.path.join("/root/mtad/datasets/{}".format(dataset), "{}_interpretation_label.txt".format(dataset)),
+    ]
+    for candidate in candidate_paths:
+        if os.path.isfile(candidate):
+            return candidate
     return None
 
 
@@ -151,7 +189,7 @@ def sensor_scores_from_attention(attn_matrix):
     return row_sum + col_sum
 
 
-def compute_rca_hitk(target_dir, dataset, group):
+def compute_rca_hitk(target_dir, dataset, group, label_path_override=None):
     rca_dir = os.path.join(target_dir, "rca_attention")
     if not os.path.isdir(rca_dir):
         warnings.warn("rca_attention folder not found under {}".format(target_dir))
@@ -167,7 +205,8 @@ def compute_rca_hitk(target_dir, dataset, group):
         warnings.warn("all_sparse_attention.npy not found: {}".format(all_attn_path))
         return None, None, None
 
-    label_path = resolve_label_path(dataset, group)
+    group = infer_group_from_target_dir(dataset, group, target_dir)
+    label_path = resolve_label_path(dataset, group, label_path_override=label_path_override)
     if label_path is None or not os.path.isfile(label_path):
         warnings.warn("Interpretation label file not found for dataset/group.")
         return None, None, None
@@ -350,10 +389,16 @@ def main():
         print("Error: {}".format(e))
         return
 
+    group = infer_group_from_target_dir(dataset, group, target_dir)
     f1, precision, recall = load_summary_metrics(target_dir)
 
     try:
-        hit1, hit3, hit5 = compute_rca_hitk(target_dir, dataset, group)
+        hit1, hit3, hit5 = compute_rca_hitk(
+            target_dir,
+            dataset,
+            group,
+            label_path_override=args.label_path,
+        )
     except Exception as e:
         warnings.warn("RCA metric computation failed: {}".format(e))
         hit1, hit3, hit5 = None, None, None
