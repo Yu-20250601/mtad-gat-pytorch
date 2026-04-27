@@ -168,19 +168,6 @@ def compute_rca_hitk(target_dir, dataset, group):
         return None, None, None
 
     label_path = resolve_label_path(dataset, group)
-    if label_path is None or not os.path.isfile(label_path):
-        warnings.warn("Interpretation label file not found for dataset/group.")
-        return None, None, None
-
-    selected = np.load(selected_path)
-    all_attn = np.load(all_attn_path)
-    label_ranges, all_dims = parse_interpretation_labels(label_path)
-
-    # Auto align dimensional indexing
-    one_based = len(all_dims) > 0 and min(all_dims) >= 1
-    if one_based:
-        label_ranges = [(s, e, maybe_to_zero_based(d)) for s, e, d in label_ranges]
-
     hit1_list = []
     hit3_list = []
     hit5_list = []
@@ -215,8 +202,6 @@ def compute_rca_hitk(target_dir, dataset, group):
 
 def plot_anomaly_detection(target_dir):
     test_pkl_path = os.path.join(target_dir, "test_output.pkl")
-    if not os.path.isfile(test_pkl_path):
-        warnings.warn("test_output.pkl not found: {}".format(test_pkl_path))
         return
 
     df = pd.read_pickle(test_pkl_path)
@@ -227,8 +212,7 @@ def plot_anomaly_detection(target_dir):
         warnings.warn("A_True_Global missing in test_output.pkl")
         return
 
-    scores = df["A_Score_Global"].values
-    labels = df["A_True_Global"].values
+        scores = sensor_scores_from_attention(all_attn[idx])
     x = np.arange(len(scores))
 
     set_publication_style()
@@ -239,37 +223,12 @@ def plot_anomaly_detection(target_dir):
     axes[0].set_title("MTAD-GAT Anomaly Detection Report", fontsize=14)
     axes[0].grid(alpha=0.3)
 
-    axes[1].plot(x, labels, color="#d62728", linewidth=1.0)
-    axes[1].set_ylabel("Ground Truth", fontsize=12)
-    axes[1].set_xlabel("Time Index", fontsize=12)
-    axes[1].set_ylim(-0.1, 1.1)
-    axes[1].grid(alpha=0.3)
-
-    fig.tight_layout()
-    save_path = os.path.join(target_dir, "anomaly_detection_report.png")
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-
-def plot_sparse_heatmap(target_dir):
-    rca_dir = os.path.join(target_dir, "rca_attention")
     if not os.path.isdir(rca_dir):
         warnings.warn("rca_attention folder not found under {}".format(target_dir))
         return
 
     all_attn_path = os.path.join(rca_dir, "all_sparse_attention.npy")
-    selected_path = os.path.join(rca_dir, "selected_indices.npy")
-
-    if not os.path.isfile(all_attn_path):
-        warnings.warn("all_sparse_attention.npy not found: {}".format(all_attn_path))
-        return
-
-    all_attn = np.load(all_attn_path)
-    if all_attn.ndim != 3 or all_attn.shape[1] != all_attn.shape[2]:
-        warnings.warn("Unexpected sparse attention shape: {}".format(all_attn.shape))
-        return
-
-    if os.path.isfile(selected_path):
+    return float(np.mean(hit1_list)), float(np.mean(hit3_list)), float(np.mean(hit5_list))
         selected = np.load(selected_path)
         if len(selected) > 0:
             idx = int(selected[0])
