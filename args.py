@@ -74,6 +74,13 @@ def get_parser():
     parser.add_argument("--dynamic_pot", type=str2bool, default=False)
     parser.add_argument("--export_sparse_attention", type=str2bool, default=False)
     parser.add_argument("--sparse_attention_topk", type=int, default=20)
+    parser.add_argument(
+        "--rca_threshold_method",
+        type=str.lower,
+        default="pot",
+        choices=["epsilon", "pot", "bf"],
+        help="Thresholding method used to build global anomaly windows for RCA export.",
+    )
 
     # --- Other ---
     parser.add_argument("--comment", type=str, default="")

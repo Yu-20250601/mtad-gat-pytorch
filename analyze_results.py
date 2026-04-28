@@ -31,6 +31,13 @@ def parse_args():
         default=None,
         help="Optional explicit run directory. If not provided, latest run is used.",
     )
+    parser.add_argument(
+        "--threshold_method",
+        type=str,
+        default="pot_result",
+        choices=["epsilon_result", "pot_result", "bf_result"],
+        help="Which threshold result to report in summary_report.txt.",
+    )
     return parser.parse_args()
 
 
@@ -61,7 +68,7 @@ def get_latest_target_dir(base_dir):
     return subdirs[0]
 
 
-def load_summary_metrics(target_dir):
+def load_summary_metrics(target_dir, threshold_method="pot_result"):
     summary_files = []
     for name in os.listdir(target_dir):
         if name.startswith("summary") and name.endswith(".txt"):
@@ -76,8 +83,8 @@ def load_summary_metrics(target_dir):
         try:
             with open(summary_path, "r") as f:
                 summary = json.load(f)
-            epsilon = summary.get("epsilon_result", {})
-            return epsilon.get("f1"), epsilon.get("precision"), epsilon.get("recall")
+            result = summary.get(threshold_method, {})
+            return result.get("f1"), result.get("precision"), result.get("recall")
         except Exception:
             continue
 
@@ -386,7 +393,7 @@ def main():
         return
 
     group = infer_group_from_target_dir(dataset, group, target_dir)
-    f1, precision, recall = load_summary_metrics(target_dir)
+    f1, precision, recall = load_summary_metrics(target_dir, threshold_method=args.threshold_method)
 
     try:
         hit1, hit3, hit5 = compute_rca_hitk(
