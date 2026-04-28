@@ -1,0 +1,85 @@
+nohup: ignoring input
+{'dataset': 'SMD', 'group': '3-2', 'lookback': 100, 'normalize': True, 'spec_res': False, 'kernel_size': 7, 'use_gatv2': True, 'feat_gat_embed_dim': None, 'time_gat_embed_dim': None, 'use_adaptive_sparse_feat_gat': True, 'node_embed_dim': 16, 'use_node_embedding': True, 'use_sparsemax': True, 'gru_n_layers': 1, 'gru_hid_dim': 150, 'fc_n_layers': 3, 'fc_hid_dim': 150, 'recon_n_layers': 1, 'recon_hid_dim': 150, 'recon_model': 'vae', 'vae_latent_dim': 64, 'kl_beta': 0.001, 'alpha': 0.2, 'epochs': 30, 'val_split': 0.1, 'bs': 256, 'init_lr': 0.001, 'shuffle_dataset': True, 'dropout': 0.3, 'use_cuda': True, 'print_every': 1, 'log_tensorboard': True, 'scale_scores': False, 'use_mov_av': False, 'gamma': 1, 'level': None, 'q': None, 'dynamic_pot': False, 'export_sparse_attention': True, 'sparse_attention_topk': 50, 'rca_threshold_method': 'pot', 'comment': ''}
+load data of: machine-3-2
+train:  0 None
+test:  0 None
+Data normalized
+Data normalized
+train set shape:  (23702, 38)
+test set shape:  (23703, 38)
+test set label shape:  (23703,)
+Will forecast and reconstruct all 38 input features
+train_size: 21242
+validation_size: 2360
+test_size: 23603
+Init total train loss: 0.639965
+Init total val loss: 0.64035
+Training model for 30 epochs..
+[Epoch 1] forecast_loss = 0.13475, recon_loss = 0.12640, total_loss = 0.26115 ---- val_forecast_loss = 0.07745, val_recon_loss = 0.09163, val_total_loss = 0.16907 [8.5s]
+[Epoch 2] forecast_loss = 0.08102, recon_loss = 0.09148, total_loss = 0.17250 ---- val_forecast_loss = 0.05237, val_recon_loss = 0.08964, val_total_loss = 0.14201 [8.1s]
+[Epoch 3] forecast_loss = 0.06255, recon_loss = 0.08994, total_loss = 0.15249 ---- val_forecast_loss = 0.04625, val_recon_loss = 0.08573, val_total_loss = 0.13198 [8.3s]
+[Epoch 4] forecast_loss = 0.05743, recon_loss = 0.07792, total_loss = 0.13535 ---- val_forecast_loss = 0.04443, val_recon_loss = 0.07269, val_total_loss = 0.11713 [8.2s]
+[Epoch 5] forecast_loss = 0.05505, recon_loss = 0.07046, total_loss = 0.12551 ---- val_forecast_loss = 0.04486, val_recon_loss = 0.06877, val_total_loss = 0.11363 [8.1s]
+[Epoch 6] forecast_loss = 0.05368, recon_loss = 0.06612, total_loss = 0.11980 ---- val_forecast_loss = 0.04424, val_recon_loss = 0.06173, val_total_loss = 0.10597 [8.3s]
+[Epoch 7] forecast_loss = 0.05259, recon_loss = 0.05862, total_loss = 0.11121 ---- val_forecast_loss = 0.04390, val_recon_loss = 0.05626, val_total_loss = 0.10016 [8.1s]
+[Epoch 8] forecast_loss = 0.05146, recon_loss = 0.05530, total_loss = 0.10675 ---- val_forecast_loss = 0.04390, val_recon_loss = 0.05471, val_total_loss = 0.09861 [8.3s]
+[Epoch 9] forecast_loss = 0.05087, recon_loss = 0.05483, total_loss = 0.10570 ---- val_forecast_loss = 0.04102, val_recon_loss = 0.05426, val_total_loss = 0.09528 [8.2s]
+[Epoch 10] forecast_loss = 0.04949, recon_loss = 0.05402, total_loss = 0.10352 ---- val_forecast_loss = 0.04217, val_recon_loss = 0.05470, val_total_loss = 0.09687 [8.2s]
+[Epoch 11] forecast_loss = 0.04855, recon_loss = 0.05372, total_loss = 0.10227 ---- val_forecast_loss = 0.04275, val_recon_loss = 0.05336, val_total_loss = 0.09611 [8.3s]
+[Epoch 12] forecast_loss = 0.04794, recon_loss = 0.05353, total_loss = 0.10146 ---- val_forecast_loss = 0.04023, val_recon_loss = 0.05313, val_total_loss = 0.09336 [8.2s]
+[Epoch 13] forecast_loss = 0.04701, recon_loss = 0.05338, total_loss = 0.10039 ---- val_forecast_loss = 0.03955, val_recon_loss = 0.05311, val_total_loss = 0.09266 [8.2s]
+[Epoch 14] forecast_loss = 0.04646, recon_loss = 0.05315, total_loss = 0.09961 ---- val_forecast_loss = 0.04050, val_recon_loss = 0.05374, val_total_loss = 0.09425 [8.2s]
+[Epoch 15] forecast_loss = 0.04666, recon_loss = 0.05293, total_loss = 0.09960 ---- val_forecast_loss = 0.04032, val_recon_loss = 0.05256, val_total_loss = 0.09288 [7.7s]
+[Epoch 16] forecast_loss = 0.04553, recon_loss = 0.05257, total_loss = 0.09810 ---- val_forecast_loss = 0.04043, val_recon_loss = 0.05220, val_total_loss = 0.09262 [8.1s]
+[Epoch 17] forecast_loss = 0.04506, recon_loss = 0.05240, total_loss = 0.09746 ---- val_forecast_loss = 0.04010, val_recon_loss = 0.05252, val_total_loss = 0.09262 [8.0s]
+[Epoch 18] forecast_loss = 0.04469, recon_loss = 0.05235, total_loss = 0.09704 ---- val_forecast_loss = 0.04013, val_recon_loss = 0.05265, val_total_loss = 0.09278 [5.9s]
+[Epoch 19] forecast_loss = 0.04450, recon_loss = 0.05225, total_loss = 0.09675 ---- val_forecast_loss = 0.03887, val_recon_loss = 0.05249, val_total_loss = 0.09136 [4.2s]
+[Epoch 20] forecast_loss = 0.04415, recon_loss = 0.05208, total_loss = 0.09623 ---- val_forecast_loss = 0.03866, val_recon_loss = 0.05209, val_total_loss = 0.09074 [4.2s]
+[Epoch 21] forecast_loss = 0.04365, recon_loss = 0.05202, total_loss = 0.09567 ---- val_forecast_loss = 0.03797, val_recon_loss = 0.05193, val_total_loss = 0.08990 [4.3s]
+[Epoch 22] forecast_loss = 0.04341, recon_loss = 0.05200, total_loss = 0.09541 ---- val_forecast_loss = 0.03850, val_recon_loss = 0.05132, val_total_loss = 0.08982 [4.3s]
+[Epoch 23] forecast_loss = 0.04305, recon_loss = 0.05197, total_loss = 0.09502 ---- val_forecast_loss = 0.03866, val_recon_loss = 0.05187, val_total_loss = 0.09053 [4.4s]
+[Epoch 24] forecast_loss = 0.04273, recon_loss = 0.05194, total_loss = 0.09467 ---- val_forecast_loss = 0.03833, val_recon_loss = 0.05198, val_total_loss = 0.09031 [4.2s]
+[Epoch 25] forecast_loss = 0.04239, recon_loss = 0.05172, total_loss = 0.09412 ---- val_forecast_loss = 0.03748, val_recon_loss = 0.05174, val_total_loss = 0.08922 [4.2s]
+[Epoch 26] forecast_loss = 0.04251, recon_loss = 0.05172, total_loss = 0.09422 ---- val_forecast_loss = 0.03772, val_recon_loss = 0.05140, val_total_loss = 0.08912 [4.3s]
+[Epoch 27] forecast_loss = 0.04212, recon_loss = 0.05158, total_loss = 0.09370 ---- val_forecast_loss = 0.03769, val_recon_loss = 0.05164, val_total_loss = 0.08934 [4.2s]
+[Epoch 28] forecast_loss = 0.04193, recon_loss = 0.05149, total_loss = 0.09343 ---- val_forecast_loss = 0.03743, val_recon_loss = 0.05137, val_total_loss = 0.08880 [4.3s]
+[Epoch 29] forecast_loss = 0.04144, recon_loss = 0.05152, total_loss = 0.09296 ---- val_forecast_loss = 0.03735, val_recon_loss = 0.05172, val_total_loss = 0.08907 [4.2s]
+[Epoch 30] forecast_loss = 0.04149, recon_loss = 0.05144, total_loss = 0.09292 ---- val_forecast_loss = 0.03715, val_recon_loss = 0.05147, val_total_loss = 0.08862 [4.2s]
+-- Training done in 196s.
+Test forecast loss: 0.06157
+Test reconstruction loss: 0.08322
+Test total loss: 0.14479
+Predicting and calculating anomaly scores..
+  0%|          | 0/93 [00:00<?, ?it/s]  3%|▎         | 3/93 [00:00<00:03, 22.66it/s]  6%|▋         | 6/93 [00:00<00:03, 23.01it/s] 10%|▉         | 9/93 [00:00<00:03, 23.01it/s] 13%|█▎        | 12/93 [00:00<00:03, 23.08it/s] 16%|█▌        | 15/93 [00:00<00:03, 23.14it/s] 19%|█▉        | 18/93 [00:00<00:03, 23.06it/s] 23%|██▎       | 21/93 [00:00<00:03, 23.17it/s] 26%|██▌       | 24/93 [00:01<00:02, 23.22it/s] 29%|██▉       | 27/93 [00:01<00:02, 23.25it/s] 32%|███▏      | 30/93 [00:01<00:02, 23.13it/s] 35%|███▌      | 33/93 [00:01<00:02, 23.16it/s] 39%|███▊      | 36/93 [00:01<00:02, 23.21it/s] 42%|████▏     | 39/93 [00:01<00:02, 23.25it/s] 45%|████▌     | 42/93 [00:01<00:02, 23.28it/s] 48%|████▊     | 45/93 [00:01<00:02, 23.26it/s] 52%|█████▏    | 48/93 [00:02<00:01, 23.24it/s] 55%|█████▍    | 51/93 [00:02<00:01, 23.27it/s] 58%|█████▊    | 54/93 [00:02<00:01, 23.17it/s] 61%|██████▏   | 57/93 [00:02<00:01, 23.14it/s] 65%|██████▍   | 60/93 [00:02<00:01, 23.17it/s] 68%|██████▊   | 63/93 [00:02<00:01, 23.12it/s] 71%|███████   | 66/93 [00:02<00:01, 23.17it/s] 74%|███████▍  | 69/93 [00:02<00:01, 23.22it/s] 77%|███████▋  | 72/93 [00:03<00:00, 23.13it/s] 81%|████████  | 75/93 [00:03<00:00, 23.13it/s] 84%|████████▍ | 78/93 [00:03<00:00, 22.93it/s] 87%|████████▋ | 81/93 [00:03<00:00, 22.97it/s] 90%|█████████ | 84/93 [00:03<00:00, 22.98it/s] 94%|█████████▎| 87/93 [00:03<00:00, 23.08it/s] 97%|█████████▋| 90/93 [00:03<00:00, 23.15it/s]100%|██████████| 93/93 [00:03<00:00, 23.32it/s]
+Predicting and calculating anomaly scores..
+  0%|          | 0/93 [00:00<?, ?it/s]  3%|▎         | 3/93 [00:00<00:03, 22.64it/s]  6%|▋         | 6/93 [00:00<00:03, 22.81it/s] 10%|▉         | 9/93 [00:00<00:03, 22.87it/s] 13%|█▎        | 12/93 [00:00<00:03, 22.85it/s] 16%|█▌        | 15/93 [00:00<00:03, 22.86it/s] 19%|█▉        | 18/93 [00:00<00:03, 22.86it/s] 23%|██▎       | 21/93 [00:00<00:03, 22.80it/s] 26%|██▌       | 24/93 [00:01<00:03, 22.77it/s] 29%|██▉       | 27/93 [00:01<00:02, 22.79it/s] 32%|███▏      | 30/93 [00:01<00:02, 22.81it/s] 35%|███▌      | 33/93 [00:01<00:02, 22.81it/s] 39%|███▊      | 36/93 [00:01<00:02, 22.75it/s] 42%|████▏     | 39/93 [00:01<00:02, 22.76it/s] 45%|████▌     | 42/93 [00:01<00:02, 22.77it/s] 48%|████▊     | 45/93 [00:01<00:02, 22.82it/s] 52%|█████▏    | 48/93 [00:02<00:01, 22.77it/s] 55%|█████▍    | 51/93 [00:02<00:01, 22.74it/s] 58%|█████▊    | 54/93 [00:02<00:01, 22.78it/s] 61%|██████▏   | 57/93 [00:02<00:01, 22.70it/s] 65%|██████▍   | 60/93 [00:02<00:01, 22.71it/s] 68%|██████▊   | 63/93 [00:02<00:01, 22.76it/s] 71%|███████   | 66/93 [00:02<00:01, 22.72it/s] 74%|███████▍  | 69/93 [00:03<00:01, 22.69it/s] 77%|███████▋  | 72/93 [00:03<00:00, 22.64it/s] 81%|████████  | 75/93 [00:03<00:00, 22.71it/s] 84%|████████▍ | 78/93 [00:03<00:00, 22.71it/s] 87%|████████▋ | 81/93 [00:03<00:00, 22.62it/s] 90%|█████████ | 84/93 [00:03<00:00, 22.65it/s] 94%|█████████▎| 87/93 [00:03<00:00, 22.66it/s] 97%|█████████▋| 90/93 [00:03<00:00, 22.68it/s]100%|██████████| 93/93 [00:04<00:00, 22.94it/s]
+/root/mtad-gat-pytorch/spot.py:316: RuntimeWarning: divide by zero encountered in log
+  return 1 + np.log(s).mean()
+/root/mtad-gat-pytorch/spot.py:319: RuntimeWarning: divide by zero encountered in divide
+  return np.mean(1 / s)
+/root/mtad-gat-pytorch/spot.py:332: RuntimeWarning: divide by zero encountered in divide
+  jac_vs = (1 / t) * (-vs + np.mean(1 / s ** 2))
+/root/mtad-gat-pytorch/spot.py:332: RuntimeWarning: invalid value encountered in scalar add
+  jac_vs = (1 / t) * (-vs + np.mean(1 / s ** 2))
+Running POT with q=0.001, level=0.9999..
+POT initialization level adjusted from 0.9999 to 0.999746 because the original level produced too few peaks (current peaks: 5).
+Initial threshold : 0.3084095
+Number of peaks : 5
+Grimshaw maximum log-likelihood estimation ... [done]
+	γ = -0.629643440246582
+	σ = 0.04748960459954797
+	L = 13.384439413376143
+Extreme quantile (probability = 0.001): 0.18344522003365088
+  0%|          | 0/23603 [00:00<?, ?it/s]100%|██████████| 23603/23603 [00:00<00:00, 2141704.68it/s]
+0
+23603
+Finding best f1-score by searching for threshold..
+Results using epsilon method:
+ {'f1': 0.0, 'precision': 0.0, 'recall': 0.0, 'TP': 0.0, 'TN': 22494.0, 'FP': 0.0, 'FN': 1109.0, 'threshold': 0.37457903381437063, 'latency': 0.0, 'reg_level': 1}
+Results using peak-over-threshold method:
+ {'f1': 0.8062778619159569, 'precision': 0.6888178869724096, 'recall': 0.9720468803241941, 'TP': 1078.0, 'TN': 22007.0, 'FP': 487.0, 'FN': 31.0, 'threshold': 0.18344522003365085, 'latency': 12.249846876914038}
+Results using best f1 score search:
+ {'f1': 0.9166260444755852, 'precision': 0.8715447083614252, 'recall': 0.9666366008418702, 'TP': 1072.0, 'TN': 22336.0, 'FP': 158.0, 'FN': 37.0, 'threshold': 0.20900000000000002, 'latency': 47.856459193440095}
+Saving output to output/SMD/3-2/28042026_175743/<train/test>_output.pkl
+Saved sparse attention artifacts to output/SMD/3-2/28042026_175743/rca_attention
+-- Done.
