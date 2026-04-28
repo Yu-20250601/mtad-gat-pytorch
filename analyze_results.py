@@ -14,6 +14,18 @@ def parse_args():
     parser.add_argument("--dataset", type=str, required=True, help="Dataset name, e.g. SMD, WADI, MSL")
     parser.add_argument("--group", type=str, default=None, help="Optional group, e.g. 1-1")
     parser.add_argument(
+        "--output_root",
+        type=str,
+        default="output",
+        help="Root directory that stores experiment outputs.",
+    )
+    parser.add_argument(
+        "--label_path",
+        type=str,
+        default=None,
+        help="Optional explicit interpretation label file path for RCA evaluation.",
+    )
+    parser.add_argument(
         "--target_dir",
         type=str,
         default=None,
@@ -22,10 +34,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_base_dir(dataset, group):
+def get_base_dir(output_root, dataset, group):
     if group:
-        return os.path.join("output", dataset, group)
-    return os.path.join("output", dataset)
+        return os.path.join(output_root, dataset, group)
+    return os.path.join(output_root, dataset)
+
+
+def get_repo_root():
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 def get_latest_target_dir(base_dir):
@@ -69,41 +85,63 @@ def load_summary_metrics(target_dir):
     return None, None, None
 
 
-def resolve_label_path(dataset, group):
+def infer_group_from_target_dir(dataset, group, target_dir):
+    if group is not None or dataset.upper() != "SMD" or target_dir is None:
+        return group
+
+    normalized = os.path.normpath(target_dir)
+    parts = normalized.split(os.sep)
+    for i, part in enumerate(parts[:-1]):
+        if part.upper() == "SMD" and i + 1 < len(parts):
+            candidate = parts[i + 1]
+            if re.match(r"^\d+-\d+$", candidate):
+                return candidate
+    return group
+
+
+def resolve_label_path(dataset, group, label_path_override=None):
+    if label_path_override is not None:
+        if os.path.isfile(label_path_override):
+            return label_path_override
+        warnings.warn("Provided label path does not exist: {}".format(label_path_override))
+        return None
+
     ds_upper = dataset.upper()
+    repo_root = get_repo_root()
     if ds_upper == "SMD":
         if group is None:
             warnings.warn("SMD requires --group to locate interpretation labels.")
             return None
-        # User-specified preferred path
-        preferred = "/root/mtad/datasets/SMD/interpretation_label/machine-{}.txt".format(group)
-        if os.path.isfile(preferred):
-            return preferred
-        # Compatibility fallback for this repository layout
-        fallback = "/root/mtad/datasets/ServerMachineDataset/interpretation_label/machine-{}.txt".format(group)
-        if os.path.isfile(fallback):
-            return fallback
+
+        candidate_paths = [
+            os.path.join(repo_root, "datasets", "ServerMachineDataset", "interpretation_label", "machine-{}.txt".format(group)),
+            os.path.join(repo_root, "datasets", "SMD", "interpretation_label", "machine-{}.txt".format(group)),
+            os.path.join("/root/mtad/datasets/SMD/interpretation_label", "machine-{}.txt".format(group)),
+            os.path.join("/root/mtad/datasets/ServerMachineDataset/interpretation_label", "machine-{}.txt".format(group)),
+        ]
+        for candidate in candidate_paths:
+            if os.path.isfile(candidate):
+                return candidate
         return None
 
-    preferred = "/root/mtad/datasets/{0}/{0}_interpretation_label.txt".format(dataset)
-    if os.path.isfile(preferred):
-        return preferred
+    candidate_paths = [
+        os.path.join(repo_root, "datasets", "data", "{}_interpretation_label.txt".format(dataset.lower())),
+        os.path.join(repo_root, "datasets", ds_upper, "{}_interpretation_label.txt".format(ds_upper)),
+        os.path.join("/root/mtad/datasets/{}".format(dataset), "{}_interpretation_label.txt".format(dataset)),
+    ]
+    for candidate in candidate_paths:
+        if os.path.isfile(candidate):
+            return candidate
     return None
 
 
 def parse_dims(raw):
-    # Supports comma/space/newline-separated integers
     tokens = re.findall(r"-?\d+", raw)
     dims = [int(t) for t in tokens]
     return dims
 
 
 def parse_interpretation_labels(label_path):
-    """
-    Returns:
-        label_ranges: list of (start, end, [dims...]) with inclusive range.
-        all_dims: flattened list of dims, for 1-based check.
-    """
     label_ranges = []
     all_dims = []
 
@@ -119,7 +157,6 @@ def parse_interpretation_labels(label_path):
             label_ranges.append((start_i, end_i, dims))
             all_dims.extend(dims)
         else:
-            # Fallback: if no range format, keep as global dims
             dims = parse_dims(line)
             if dims:
                 label_ranges.append((0, 10 ** 18, dims))
@@ -131,7 +168,6 @@ def parse_interpretation_labels(label_path):
 def maybe_to_zero_based(dims):
     if not dims:
         return dims
-    # If all dims >= 1, likely 1-based indexing.
     if min(dims) >= 1:
         return [d - 1 for d in dims]
     return dims
@@ -145,13 +181,12 @@ def get_true_dims_for_index(index_i, label_ranges):
 
 
 def sensor_scores_from_attention(attn_matrix):
-    # Aggregate inbound + outbound to reflect sensor centrality in sparse graph
     row_sum = np.sum(attn_matrix, axis=1)
     col_sum = np.sum(attn_matrix, axis=0)
     return row_sum + col_sum
 
 
-def compute_rca_hitk(target_dir, dataset, group):
+def compute_rca_hitk(target_dir, dataset, group, label_path_override=None):
     rca_dir = os.path.join(target_dir, "rca_attention")
     if not os.path.isdir(rca_dir):
         warnings.warn("rca_attention folder not found under {}".format(target_dir))
@@ -167,7 +202,20 @@ def compute_rca_hitk(target_dir, dataset, group):
         warnings.warn("all_sparse_attention.npy not found: {}".format(all_attn_path))
         return None, None, None
 
-    label_path = resolve_label_path(dataset, group)
+    group = infer_group_from_target_dir(dataset, group, target_dir)
+    label_path = resolve_label_path(dataset, group, label_path_override=label_path_override)
+    if label_path is None or not os.path.isfile(label_path):
+        warnings.warn("Interpretation label file not found for dataset/group.")
+        return None, None, None
+
+    selected = np.load(selected_path)
+    all_attn = np.load(all_attn_path)
+    label_ranges, all_dims = parse_interpretation_labels(label_path)
+
+    one_based = len(all_dims) > 0 and min(all_dims) >= 1
+    if one_based:
+        label_ranges = [(s, e, maybe_to_zero_based(d)) for s, e, d in label_ranges]
+
     hit1_list = []
     hit3_list = []
     hit5_list = []
@@ -202,6 +250,8 @@ def compute_rca_hitk(target_dir, dataset, group):
 
 def plot_anomaly_detection(target_dir):
     test_pkl_path = os.path.join(target_dir, "test_output.pkl")
+    if not os.path.isfile(test_pkl_path):
+        warnings.warn("test_output.pkl not found: {}".format(test_pkl_path))
         return
 
     df = pd.read_pickle(test_pkl_path)
@@ -212,7 +262,8 @@ def plot_anomaly_detection(target_dir):
         warnings.warn("A_True_Global missing in test_output.pkl")
         return
 
-        scores = sensor_scores_from_attention(all_attn[idx])
+    scores = df["A_Score_Global"].values
+    labels = df["A_True_Global"].values
     x = np.arange(len(scores))
 
     set_publication_style()
@@ -223,12 +274,37 @@ def plot_anomaly_detection(target_dir):
     axes[0].set_title("MTAD-GAT Anomaly Detection Report", fontsize=14)
     axes[0].grid(alpha=0.3)
 
+    axes[1].plot(x, labels, color="#d62728", linewidth=1.0)
+    axes[1].set_ylabel("Ground Truth", fontsize=12)
+    axes[1].set_xlabel("Time Index", fontsize=12)
+    axes[1].set_ylim(-0.1, 1.1)
+    axes[1].grid(alpha=0.3)
+
+    fig.tight_layout()
+    save_path = os.path.join(target_dir, "anomaly_detection_report.png")
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_sparse_heatmap(target_dir):
+    rca_dir = os.path.join(target_dir, "rca_attention")
     if not os.path.isdir(rca_dir):
         warnings.warn("rca_attention folder not found under {}".format(target_dir))
         return
 
     all_attn_path = os.path.join(rca_dir, "all_sparse_attention.npy")
-    return float(np.mean(hit1_list)), float(np.mean(hit3_list)), float(np.mean(hit5_list))
+    selected_path = os.path.join(rca_dir, "selected_indices.npy")
+
+    if not os.path.isfile(all_attn_path):
+        warnings.warn("all_sparse_attention.npy not found: {}".format(all_attn_path))
+        return
+
+    all_attn = np.load(all_attn_path)
+    if all_attn.ndim != 3 or all_attn.shape[1] != all_attn.shape[2]:
+        warnings.warn("Unexpected sparse attention shape: {}".format(all_attn.shape))
+        return
+
+    if os.path.isfile(selected_path):
         selected = np.load(selected_path)
         if len(selected) > 0:
             idx = int(selected[0])
@@ -303,16 +379,22 @@ def main():
             if not os.path.isdir(target_dir):
                 raise FileNotFoundError("Provided target_dir does not exist: {}".format(target_dir))
         else:
-            base_dir = get_base_dir(dataset, group)
+            base_dir = get_base_dir(args.output_root, dataset, group)
             target_dir = get_latest_target_dir(base_dir)
     except Exception as e:
         print("Error: {}".format(e))
         return
 
+    group = infer_group_from_target_dir(dataset, group, target_dir)
     f1, precision, recall = load_summary_metrics(target_dir)
 
     try:
-        hit1, hit3, hit5 = compute_rca_hitk(target_dir, dataset, group)
+        hit1, hit3, hit5 = compute_rca_hitk(
+            target_dir,
+            dataset,
+            group,
+            label_path_override=args.label_path,
+        )
     except Exception as e:
         warnings.warn("RCA metric computation failed: {}".format(e))
         hit1, hit3, hit5 = None, None, None
@@ -343,7 +425,6 @@ def main():
     with open(report_path, "w") as f:
         f.write(md_table + "\n")
 
-    # Additional metric is computed by requirement but not required in output table.
     if hit5 is not None:
         print("Hit@5: {:.4f}".format(hit5))
     else:
@@ -352,4 +433,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -1,0 +1,11 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/root/mtad-gat-pytorch/run_thesis_pipeline.py", line 394, in <module>
+    main()
+  File "/root/mtad-gat-pytorch/run_thesis_pipeline.py", line 339, in main
+    analyze_run(repo_root, output_root, group, baseline_run)
+  File "/root/mtad-gat-pytorch/run_thesis_pipeline.py", line 204, in analyze_run
+    run_command(command, repo_root, output_root / "logs" / log_name)
+  File "/root/mtad-gat-pytorch/run_thesis_pipeline.py", line 32, in run_command
+    raise RuntimeError(f"Command failed with exit code {code}: {' '.join(command)}")
+RuntimeError: Command failed with exit code 1: /root/miniconda3/bin/python analyze_results.py --dataset SMD --group 1-2 --target_dir /root/mtad-gat-pytorch/output/SMD/1-2/28042026_120132

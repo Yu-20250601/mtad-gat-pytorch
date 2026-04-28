@@ -95,20 +95,20 @@ def build_seed_stability_table(seed_dirs: List[Path]) -> pd.DataFrame:
 
     merged = pd.DataFrame(rows)
     summary = (
-        merged.groupby("model", as_index=False)[["f1", "precision", "recall"]]
-        .agg(["mean", "std"])
+        merged.groupby("model")
+        .agg(
+            f1_mean=("f1", "mean"),
+            f1_std=("f1", "std"),
+            precision_mean=("precision", "mean"),
+            precision_std=("precision", "std"),
+            recall_mean=("recall", "mean"),
+            recall_std=("recall", "std"),
+        )
         .reset_index()
+        .sort_values("f1_mean", ascending=False)
+        .reset_index(drop=True)
     )
-    summary.columns = [
-        "model",
-        "f1_mean",
-        "f1_std",
-        "precision_mean",
-        "precision_std",
-        "recall_mean",
-        "recall_std",
-    ]
-    return summary.sort_values("f1_mean", ascending=False).reset_index(drop=True)
+    return summary
 
 
 def build_gatv2_table(true_run: Path, false_run: Path) -> pd.DataFrame:
