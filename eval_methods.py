@@ -3,6 +3,16 @@ import more_itertools as mit
 from spot import SPOT, dSPOT
 
 
+def adjust_predicts(score, label, threshold, pred=None, calc_latency=False):
+    """
+    Calculate adjusted predict labels using given `score`, `threshold` (or given `pred`) and `label`.
+    Args:
+            score (np.ndarray): The anomaly score
+            label (np.ndarray): The ground-truth label
+            threshold (float): The threshold of anomaly score.
+                    A point is labeled as "anomaly" if its score is lower than the threshold.
+            pred (np.ndarray or None): if not None, adjust `pred` and ignore `score` and `threshold`,
+            calc_latency (bool):
     Returns:
             np.ndarray: predict labels
 
@@ -109,7 +119,10 @@ def pot_eval(init_score, score, label, q=1e-3, level=0.99, dynamic=False):
             f"(current peaks: {n_peaks})."
         )
 
-
+    s = SPOT(q)  # SPOT object
+    s.fit(init_score, score)
+    try:
+        s.initialize(level=safe_level, min_extrema=False)  # Calibration step
         ret = s.run(dynamic=dynamic, with_alarm=False)
 
         print(len(ret["alarms"]))
@@ -165,7 +178,9 @@ def bf_search(score, label, start, end=None, step_num=1, display_freq=1, verbose
     m_t = 0.0
     m_l = 0
     for i in range(search_step):
-
+        threshold += search_range / float(search_step)
+        target, latency = calc_seq(score, label, threshold)
+        if target[0] > m[0]:
             m_t = threshold
             m = target
             m_l = latency
@@ -206,6 +221,10 @@ def epsilon_eval(train_scores, test_scores, test_labels, reg_level=1):
             "threshold": best_epsilon,
             "latency": p_latency,
             "reg_level": reg_level,
+        }
+    else:
+        return {"threshold": best_epsilon, "reg_level": reg_level}
+
 
 def find_epsilon(errors, reg_level=1):
     """
