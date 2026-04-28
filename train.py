@@ -34,10 +34,10 @@ if __name__ == "__main__":
     print(args_summary)
 
     if dataset == 'SMD':
-        output_path = f'output/SMD/{args.group}'
+        output_path = os.path.join(args.output_root, 'SMD', args.group)
         (x_train, _), (x_test, y_test) = get_data(f"machine-{group_index}-{index}", normalize=normalize)
     elif dataset in ['MSL', 'SMAP']:
-        output_path = f'output/{dataset}'
+        output_path = os.path.join(args.output_root, dataset)
         (x_train, _), (x_test, y_test) = get_data(dataset, normalize=normalize)
     else:
         raise Exception(f'Dataset "{dataset}" not available.')

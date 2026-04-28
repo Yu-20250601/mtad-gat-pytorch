@@ -20,9 +20,9 @@ if __name__ == "__main__":
     dataset = args.dataset
     if args.model_id is None:
         if dataset == 'SMD':
-            dir_path = f"./output/{dataset}/{args.group}"
+            dir_path = os.path.join(".", args.output_root, dataset, args.group)
         else:
-            dir_path = f"./output/{dataset}"
+            dir_path = os.path.join(".", args.output_root, dataset)
         dir_content = os.listdir(dir_path)
         subfolders = [subf for subf in dir_content if os.path.isdir(f"{dir_path}/{subf}") and subf != "logs"]
         date_times = [datetime.datetime.strptime(subf, '%d%m%Y_%H%M%S') for subf in subfolders]
@@ -34,9 +34,9 @@ if __name__ == "__main__":
         model_id = args.model_id
 
     if dataset == "SMD":
-        model_path = f"./output/{dataset}/{args.group}/{model_id}"
+        model_path = os.path.join(".", args.output_root, dataset, args.group, model_id)
     elif dataset in ['MSL', 'SMAP']:
-        model_path = f"./output/{dataset}/{model_id}"
+        model_path = os.path.join(".", args.output_root, dataset, model_id)
     else:
         raise Exception(f'Dataset "{dataset}" not available.')
 

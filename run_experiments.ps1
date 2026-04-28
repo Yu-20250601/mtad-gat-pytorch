@@ -18,15 +18,61 @@ param(
 
     [double]$ValSplit = 0.1,
 
+    [string]$BranchTag = "",
+
+    [string]$OutputRootBase = "output_branches",
+
+    [string]$ReportsRootBase = "reports_branch",
+
+    [string]$CompareAgainstBranchTag = "",
+
+    [string]$ComparisonOutputDir = "reports_compare",
+
     [switch]$SkipRcaAfterTraining
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
 
+function Get-CurrentBranchTag {
+    param(
+        [string]$ProvidedBranchTag
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ProvidedBranchTag)) {
+        return $ProvidedBranchTag
+    }
+
+    $branchName = (& git branch --show-current).Trim()
+    if ([string]::IsNullOrWhiteSpace($branchName)) {
+        throw "Unable to determine current git branch. Pass -BranchTag explicitly."
+    }
+
+    return ($branchName -replace "[^A-Za-z0-9._-]", "_")
+}
+
+function Get-OutputRoot {
+    param(
+        [string]$RootBase,
+        [string]$ResolvedBranchTag
+    )
+
+    return Join-Path -Path $RootBase -ChildPath $ResolvedBranchTag
+}
+
+function Get-ReportsDir {
+    param(
+        [string]$RootBase,
+        [string]$ResolvedBranchTag
+    )
+
+    return Join-Path -Path $RootBase -ChildPath $ResolvedBranchTag
+}
+
 function Get-CommonArgs {
     return @(
         "--dataset", "SMD",
+        "--output_root", $script:OutputRoot,
         "--epochs", $Epochs.ToString(),
         "--lookback", $Lookback.ToString(),
         "--bs", $BatchSize.ToString(),
@@ -136,7 +182,7 @@ function Invoke-TrainingExperiment {
     foreach ($group in $Groups) {
         $cmdArgs = @("train.py") + $commonArgs + @("--group", $group) + $Experiment.TrainArgs
         Write-Host ""
-        Write-Host ("[{0}] group={1} -> {2}" -f $Experiment.Id, $group, $Experiment.Description) -ForegroundColor Cyan
+        Write-Host ("[{0}] branch={1} group={2} -> {3}" -f $Experiment.Id, $script:ResolvedBranchTag, $group, $Experiment.Description) -ForegroundColor Cyan
         Write-Host ("python " + ($cmdArgs -join " ")) -ForegroundColor DarkGray
         & python @cmdArgs
         if ($LASTEXITCODE -ne 0) {
@@ -151,7 +197,7 @@ function Get-LatestRunDirByComment {
         [string]$Comment
     )
 
-    $baseDir = Join-Path -Path $PSScriptRoot -ChildPath ("output\SMD\" + $Group)
+    $baseDir = Join-Path -Path $PSScriptRoot -ChildPath (Join-Path -Path $script:OutputRoot -ChildPath ("SMD\" + $Group))
     if (-not (Test-Path -LiteralPath $baseDir)) {
         return $null
     }
@@ -190,20 +236,91 @@ function Invoke-RcaAnalysis {
         foreach ($experimentId in $ExperimentIds) {
             $targetDir = Get-LatestRunDirByComment -Group $group -Comment $experimentId
             if ($null -eq $targetDir) {
-                Write-Warning "No run found for $experimentId on group $group. Skipping RCA."
+                Write-Warning "No run found for $experimentId on group $group under $($script:OutputRoot). Skipping RCA."
                 continue
             }
 
             Write-Host ""
-            Write-Host ("[RCA] {0} group={1}" -f $experimentId, $group) -ForegroundColor Yellow
-            Write-Host ("python analyze_results.py --dataset SMD --group {0} --target_dir `"{1}`"" -f $group, $targetDir) -ForegroundColor DarkGray
-            & python "analyze_results.py" "--dataset" "SMD" "--group" $group "--target_dir" $targetDir
+            Write-Host ("[RCA] branch={0} {1} group={2}" -f $script:ResolvedBranchTag, $experimentId, $group) -ForegroundColor Yellow
+            Write-Host ("python analyze_results.py --dataset SMD --output_root {0} --group {1} --target_dir `"{2}`"" -f $script:OutputRoot, $group, $targetDir) -ForegroundColor DarkGray
+            & python "analyze_results.py" "--dataset" "SMD" "--output_root" $script:OutputRoot "--group" $group "--target_dir" $targetDir
             if ($LASTEXITCODE -ne 0) {
                 throw "RCA analysis failed for experiment $experimentId on group $group."
             }
         }
     }
 }
+
+function Invoke-SummaryReport {
+    param(
+        [string[]]$Groups,
+        [string[]]$ExperimentIds
+    )
+
+    $reportsDir = Join-Path -Path $PSScriptRoot -ChildPath $script:ReportsDir
+    if (-not (Test-Path -LiteralPath $reportsDir)) {
+        New-Item -ItemType Directory -Path $reportsDir | Out-Null
+    }
+
+    $cmdArgs = @(
+        "summarize_experiments.py",
+        "--dataset", "SMD",
+        "--output_root", $script:OutputRoot,
+        "--output_dir", $script:ReportsDir,
+        "--groups"
+    ) + $Groups + @(
+        "--experiments"
+    ) + $ExperimentIds
+
+    Write-Host ""
+    Write-Host ("[REPORT] branch={0}" -f $script:ResolvedBranchTag) -ForegroundColor Green
+    Write-Host ("python " + ($cmdArgs -join " ")) -ForegroundColor DarkGray
+    & python @cmdArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Summary report generation failed."
+    }
+}
+
+function Invoke-BranchComparison {
+    param(
+        [string]$BaselineBranchTag,
+        [string]$CandidateBranchTag
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BaselineBranchTag)) {
+        return
+    }
+
+    $baselineOutputRoot = Get-OutputRoot -RootBase $OutputRootBase -ResolvedBranchTag $BaselineBranchTag
+    $candidateOutputRoot = Get-OutputRoot -RootBase $OutputRootBase -ResolvedBranchTag $CandidateBranchTag
+    $baselineReportsDir = Get-ReportsDir -RootBase $ReportsRootBase -ResolvedBranchTag $BaselineBranchTag
+    $candidateReportsDir = Get-ReportsDir -RootBase $ReportsRootBase -ResolvedBranchTag $CandidateBranchTag
+
+    $cmdArgs = @(
+        "compare_branch_results.py",
+        "--baseline_root", $baselineOutputRoot,
+        "--candidate_root", $candidateOutputRoot,
+        "--baseline_report_dir", $baselineReportsDir,
+        "--candidate_report_dir", $candidateReportsDir,
+        "--output_dir", $ComparisonOutputDir
+    )
+
+    Write-Host ""
+    Write-Host ("[COMPARE] baseline={0} candidate={1}" -f $BaselineBranchTag, $CandidateBranchTag) -ForegroundColor Magenta
+    Write-Host ("python " + ($cmdArgs -join " ")) -ForegroundColor DarkGray
+    & python @cmdArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Branch comparison report generation failed."
+    }
+}
+
+$script:ResolvedBranchTag = Get-CurrentBranchTag -ProvidedBranchTag $BranchTag
+$script:OutputRoot = Get-OutputRoot -RootBase $OutputRootBase -ResolvedBranchTag $script:ResolvedBranchTag
+$script:ReportsDir = Get-ReportsDir -RootBase $ReportsRootBase -ResolvedBranchTag $script:ResolvedBranchTag
+
+Write-Host ("Using branch tag: {0}" -f $script:ResolvedBranchTag) -ForegroundColor Green
+Write-Host ("Output root: {0}" -f $script:OutputRoot) -ForegroundColor Green
+Write-Host ("Reports dir: {0}" -f $script:ReportsDir) -ForegroundColor Green
 
 $experiments = Get-ExperimentDefinitions
 
@@ -214,6 +331,7 @@ switch ($Stage) {
         if (-not $SkipRcaAfterTraining) {
             Invoke-RcaAnalysis -Groups $CompareGroups -ExperimentIds @("E2")
         }
+        Invoke-SummaryReport -Groups $CompareGroups -ExperimentIds @("E1", "E2")
     }
     "ablation" {
         Invoke-TrainingExperiment -Experiment $experiments["E2"] -Groups $AblationGroups
@@ -224,6 +342,7 @@ switch ($Stage) {
         if (-not $SkipRcaAfterTraining) {
             Invoke-RcaAnalysis -Groups $AblationGroups -ExperimentIds @("E2", "E6")
         }
+        Invoke-SummaryReport -Groups $AblationGroups -ExperimentIds @("E2", "E3", "E4", "E5", "E6")
     }
     "all" {
         Invoke-TrainingExperiment -Experiment $experiments["E1"] -Groups $CompareGroups
@@ -236,12 +355,16 @@ switch ($Stage) {
             Invoke-RcaAnalysis -Groups $CompareGroups -ExperimentIds @("E2")
             Invoke-RcaAnalysis -Groups $AblationGroups -ExperimentIds @("E6")
         }
+        Invoke-SummaryReport -Groups @($CompareGroups + $AblationGroups | Select-Object -Unique) -ExperimentIds @("E1", "E2", "E3", "E4", "E5", "E6")
     }
     "rca" {
         Invoke-RcaAnalysis -Groups $CompareGroups -ExperimentIds @("E2")
         Invoke-RcaAnalysis -Groups $AblationGroups -ExperimentIds @("E6")
+        Invoke-SummaryReport -Groups @($CompareGroups + $AblationGroups | Select-Object -Unique) -ExperimentIds @("E1", "E2", "E3", "E4", "E5", "E6")
     }
 }
+
+Invoke-BranchComparison -BaselineBranchTag $CompareAgainstBranchTag -CandidateBranchTag $script:ResolvedBranchTag
 
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green

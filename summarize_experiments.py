@@ -18,6 +18,7 @@ EXPERIMENT_LABELS = {
     "E6": "Sparse + no NodeEmbed + VAE + GATv2",
 }
 FIELDNAMES = [
+    "output_root",
     "dataset",
     "group",
     "experiment_id",
@@ -66,6 +67,11 @@ def parse_args():
         help="Which detection metric block to read from summary.txt",
     )
     parser.add_argument(
+        "--output_root",
+        default="output",
+        help="Root directory that stores experiment outputs.",
+    )
+    parser.add_argument(
         "--output_dir",
         default="reports",
         help="Directory to write CSV/Markdown summaries into.",
@@ -90,8 +96,8 @@ def iter_run_dirs(base_dir):
     return sorted(timestamped, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
-def get_latest_run_for_experiment(dataset, group, experiment_id):
-    base_dir = repo_root() / "output" / dataset / group
+def get_latest_run_for_experiment(output_root, dataset, group, experiment_id):
+    base_dir = repo_root() / output_root / dataset / group
     for run_dir in iter_run_dirs(base_dir):
         config_path = run_dir / "config.txt"
         if not config_path.exists():
@@ -120,7 +126,7 @@ def format_value(value):
     return str(value)
 
 
-def build_row(dataset, group, experiment_id, run_dir, config, metric_key):
+def build_row(output_root, dataset, group, experiment_id, run_dir, config, metric_key):
     summary_path = run_dir / "summary.txt"
     if not summary_path.exists():
         return None
@@ -133,6 +139,7 @@ def build_row(dataset, group, experiment_id, run_dir, config, metric_key):
     hit1, hit3, hit5 = compute_rca_hitk(str(run_dir), dataset, group)
 
     return {
+        "output_root": output_root,
         "dataset": dataset,
         "group": group,
         "experiment_id": experiment_id,
@@ -171,13 +178,14 @@ def build_markdown(rows):
     if not rows:
         return "No matching experiment runs were found.\n"
     header = [
-        "| Experiment | Group | F1 | Precision | Recall | Latency | Hit@1 | Hit@3 | Hit@5 | Run |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Output Root | Experiment | Group | F1 | Precision | Recall | Latency | Hit@1 | Hit@3 | Hit@5 | Run |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     body = []
     for row in rows:
         body.append(
-            "| {exp} | {group} | {f1} | {precision} | {recall} | {latency} | {hit1} | {hit3} | {hit5} | `{run}` |".format(
+            "| `{root}` | {exp} | {group} | {f1} | {precision} | {recall} | {latency} | {hit1} | {hit3} | {hit5} | `{run}` |".format(
+                root=row["output_root"],
                 exp=row["experiment_id"],
                 group=row["group"],
                 f1=format_value(row["f1"]),
@@ -199,10 +207,10 @@ def main():
 
     for experiment_id in args.experiments:
         for group in args.groups:
-            run_dir, config = get_latest_run_for_experiment(args.dataset, group, experiment_id)
+            run_dir, config = get_latest_run_for_experiment(args.output_root, args.dataset, group, experiment_id)
             if run_dir is None:
                 continue
-            row = build_row(args.dataset, group, experiment_id, run_dir, config, args.metric)
+            row = build_row(args.output_root, args.dataset, group, experiment_id, run_dir, config, args.metric)
             if row is not None:
                 rows.append(row)
 

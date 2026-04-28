@@ -14,6 +14,12 @@ def parse_args():
     parser.add_argument("--dataset", type=str, required=True, help="Dataset name, e.g. SMD, WADI, MSL")
     parser.add_argument("--group", type=str, default=None, help="Optional group, e.g. 1-1")
     parser.add_argument(
+        "--output_root",
+        type=str,
+        default="output",
+        help="Root directory that stores experiment outputs.",
+    )
+    parser.add_argument(
         "--label_path",
         type=str,
         default=None,
@@ -28,10 +34,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_base_dir(dataset, group):
+def get_base_dir(output_root, dataset, group):
     if group:
-        return os.path.join("output", dataset, group)
-    return os.path.join("output", dataset)
+        return os.path.join(output_root, dataset, group)
+    return os.path.join(output_root, dataset)
 
 
 def get_repo_root():
@@ -383,7 +389,7 @@ def main():
             if not os.path.isdir(target_dir):
                 raise FileNotFoundError("Provided target_dir does not exist: {}".format(target_dir))
         else:
-            base_dir = get_base_dir(dataset, group)
+            base_dir = get_base_dir(args.output_root, dataset, group)
             target_dir = get_latest_target_dir(base_dir)
     except Exception as e:
         print("Error: {}".format(e))
