@@ -34,6 +34,7 @@ class Predictor:
         self.summary_file_name = summary_file_name
         self.export_sparse_attention = pred_args.get("export_sparse_attention", False)
         self.sparse_attention_topk = pred_args.get("sparse_attention_topk", 20)
+        self.rca_threshold_method = str(pred_args.get("rca_threshold_method", "pot")).lower()
 
     def get_score(self, values, return_attention=False):
         """Method that calculates anomaly score using given model and data
@@ -163,6 +164,26 @@ class Predictor:
 
         print(f"Saved sparse attention artifacts to {output_dir}")
 
+    def _build_global_predictions(self, train_scores, test_scores, true_anomalies, e_eval, p_eval, bf_eval):
+        if self.rca_threshold_method == "pot":
+            selected_eval = p_eval
+            threshold_method = "pot"
+        elif self.rca_threshold_method == "bf":
+            selected_eval = bf_eval
+            threshold_method = "bf"
+        else:
+            selected_eval = e_eval
+            threshold_method = "epsilon"
+
+        threshold = float(selected_eval["threshold"])
+        train_preds = (train_scores >= threshold).astype(int)
+        test_preds = (test_scores >= threshold).astype(int)
+
+        if true_anomalies is not None:
+            test_preds = adjust_predicts(None, true_anomalies, threshold, pred=test_preds.copy())
+
+        return threshold, train_preds, test_preds, threshold_method
+
     def predict_anomalies(self, train, test, true_anomalies, load_scores=False, save_output=True,
                           scale_scores=False):
         """ Predicts anomalies
@@ -256,18 +277,22 @@ class Predictor:
         with open(f"{self.save_path}/{self.summary_file_name}", "w") as f:
             json.dump(summary, f, indent=2)
 
-        # Save anomaly predictions made using epsilon method (could be changed to pot or bf-method)
         if save_output:
-            global_epsilon = e_eval["threshold"]
+            global_threshold, train_preds_global, test_preds_global, threshold_method = self._build_global_predictions(
+                train_anomaly_scores,
+                test_anomaly_scores,
+                true_anomalies,
+                e_eval,
+                p_eval,
+                bf_eval,
+            )
             test_pred_df["A_True_Global"] = true_anomalies
-            train_pred_df["Thresh_Global"] = global_epsilon
-            test_pred_df["Thresh_Global"] = global_epsilon
-            train_pred_df[f"A_Pred_Global"] = (train_anomaly_scores >= global_epsilon).astype(int)
-            test_preds_global = (test_anomaly_scores >= global_epsilon).astype(int)
-            # Adjust predictions according to evaluation strategy
-            if true_anomalies is not None:
-                test_preds_global = adjust_predicts(None, true_anomalies, global_epsilon, pred=test_preds_global)
-            test_pred_df[f"A_Pred_Global"] = test_preds_global
+            train_pred_df["Thresh_Global"] = global_threshold
+            test_pred_df["Thresh_Global"] = global_threshold
+            train_pred_df["A_Pred_Global"] = train_preds_global
+            test_pred_df["A_Pred_Global"] = test_preds_global
+            train_pred_df["GlobalThresholdMethod"] = threshold_method
+            test_pred_df["GlobalThresholdMethod"] = threshold_method
 
             print(f"Saving output to {self.save_path}/<train/test>_output.pkl")
             train_pred_df.to_pickle(f"{self.save_path}/train_output.pkl")

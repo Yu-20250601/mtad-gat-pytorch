@@ -163,6 +163,7 @@ if __name__ == "__main__":
         "save_path": save_path,
         "export_sparse_attention": args.export_sparse_attention,
         "sparse_attention_topk": args.sparse_attention_topk,
+        "rca_threshold_method": args.rca_threshold_method,
     }
     best_model = trainer.model
     predictor = Predictor(
