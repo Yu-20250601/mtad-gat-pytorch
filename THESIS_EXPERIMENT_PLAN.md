@@ -1,97 +1,60 @@
-# 论文正式实验计划
+﻿# 论文实验计划
 
-## 1. 文档定位
+## 1. 目标
 
-本文件用于约束毕设论文阶段的正式实验流程，目标是：
+本计划用于当前毕业论文的正式实验阶段，优先目标是：
 
-- 保证实验设置可复现、可解释、可直接写入论文；
-- 区分“正式论文实验”和“快速调试实验”；
-- 统一对比实验、稳定性实验、消融实验和定性可视化实验的执行口径；
-- 暂不预设唯一主指标，等结果汇总成表后再确定论文主指标与辅指标。
+- 先完成一套可以直接写入论文的主实验结果；
+- 数据集固定为 `SMD`；
+- 主评价指标固定为 `POT`，即以 `pot_result` 作为论文主表汇报指标；
+- 先只选择 3 台机器，保证实验量可控、结果可解释、命令可一次性跑完。
 
-本计划默认面向当前仓库中的统一实验脚本 `benchmark_models.py`。
+## 2. 当前确定的论文口径
 
-## 2. 正式实验总原则
-
-- 正式论文实验默认使用全量训练集和全量测试集。
-- 正式论文实验命令中不使用 `--max_train_size` 和 `--max_test_size`。
-- `--max_train_size` / `--max_test_size` 只允许出现在快速调试、小样本预跑、代码通路验证中，不进入论文正式结果。
-- 所有正式对比实验和消融实验都在同一批 SMD 机器上运行，保持数据范围一致。
-- 模型比较时，除被研究变量外，其余参数尽量保持不变。
-- 多随机种子实验用于验证结论稳定性，不用于替代正式主对比结果。
-- 主指标、辅指标、补充指标的最终归属，等全部结果汇总后再定。
-
-## 3. 数据选择与论文表述
-
-### 3.1 正式实验数据
-
-论文主实验固定使用 SMD 的 4 组机器：
-
-- `1-2`
-- `1-3`
-- `2-1`
-- `3-6`
-
-### 3.2 选择理由
-
-- 覆盖不同的 SMD machine group：`1-*`、`2-*`、`3-*`；
-- 兼顾异常模式差异，避免只在单一类型机器上得出结论；
-- 在保证代表性的前提下控制实验规模，便于完成多模型、多随机种子和消融实验；
-- 与当前论文写作进度匹配，适合作为正式实验主表的数据子集。
-
-### 3.3 可直接写入论文的方法描述
-
-> 本文从 SMD 数据集中选取 `1-2`、`1-3`、`2-1` 和 `3-6` 四组具有代表性的机器进行实验。所选机器覆盖不同 machine group，并尽量避免异常过于稀疏或过于简单的极端情况，以在保证实验代表性的同时控制实验规模，便于进行模型对比、稳定性验证与消融分析。
-
-## 4. 实验口径统一说明
-
-### 4.1 统一脚本
-
-正式实验统一使用：
-
-```bash
-python benchmark_models.py
-```
-
-脚本默认会输出：
-
-- `benchmark_results.csv`
-- `best_per_entity.csv`
-- `run_config.json`
-- 各模型目录下的 `metrics.json`
-
-### 4.2 正式实验固定项
-
-除特别说明外，正式实验统一采用：
+### 2.1 数据集
 
 - 数据集：`SMD`
-- 机器：`1-2,1-3,2-1,3-6`
-- `lookback=100`
-- `batch_size=256`
-- `normalize=true`
-- `use_gatv2=true` 作为默认运行设置
+- 机器数量：`3` 台
+- 最终选用机器：`1-2`、`2-1`、`3-2`
 
-说明：
+### 2.2 主评价指标
 
-- `use_gatv2=true` 在正式实验中作为默认设置，仅表示先统一固定该开关；
-- 是否保留 `use_gatv2=true` 作为最终论文默认配置，应由后续 GATv2 消融实验结果决定；
-- 正式计划阶段不提前写死“GATv2 一定更优”这一结论。
+- 主指标：`POT` 对应的 `pot_result`
+- 辅助指标：`epsilon_result`、`bf_result`
+- 论文正文主表优先汇报：`F1 / Precision / Recall`（基于 `pot_result`）
 
-### 4.3 关于阈值指标
+## 3. 为什么选这 3 台机器
 
-- 论文最终主指标暂不在本计划中写死；
-- 统一保留 `epsilon_result`、`pot_result`、`bf_result` 三套结果；
-- 等正式结果汇总成表后，再根据文献口径、结果稳定性和论文表达需要确定主指标。
+本轮选择基于已有筛选实验结果，而不是仅依据文献习惯。
 
-## 5. 正式实验一：主模型对比实验
+### 3.1 选择依据
 
-### 5.1 目的
+在当前结果中，按 `pot_result` 的最佳 F1 看：
 
-- 比较主要 MTAD-GAT 变体在相同正式实验设置下的表现；
-- 为论文主模型选择提供正式依据；
-- 为后续结构消融分析提供基础结果。
+- `2-1`：`0.9213`
+- `3-2`：`0.9123`
+- `1-2`：`0.9077`
+- `3-6`：`0.7778`
+- `1-1`：`0.7096`
+- `1-3`：`0.1851`
+- `3-7`：`0.1073`
 
-### 5.2 参与模型
+因此，`1-2`、`2-1`、`3-2` 是当前最适合在 POT 口径下作为论文主实验机器的三台。
+
+### 3.2 未选机器的原因
+
+- `3-6`：在 `POT` 下 F1 明显低于前三台，且 precision 偏低，不作为当前论文主结果机；
+- `1-1`：虽然是常见机器，但在本次 `POT` 结果下不如前三台；
+- `1-3`：`POT` 下结果过低，不适合进入主表；
+- `3-7`：`POT` 下整体表现过差，不适合作为论文主实验机器。
+
+### 3.3 可直接写入论文的表述
+
+> 本文在 SMD 数据集上选择 `machine-1-2`、`machine-2-1` 和 `machine-3-2` 作为正式实验对象。该选择基于预实验中不同机器在 POT 阈值评估口径下的表现：所选三台机器均取得较高且相对稳定的 F1 分数，能够在控制实验规模的同时保证结果具有代表性与可解释性。
+
+## 4. 主实验模型
+
+当前论文主实验固定比较以下 4 个 MTAD-GAT 变体：
 
 - `mtad_gat_gru`
 - `mtad_gat_vae`
@@ -101,256 +64,114 @@ python benchmark_models.py
 说明：
 
 - 这 4 个模型足以覆盖当前论文最关心的结构差异：`GRU / VAE / Sparsemax / Node Embedding`；
-- 若后续需要补传统基线，可单独增加一轮基线对比，不与结构消融主线混在一起。
+- 先完成这 4 个模型的正式对比，再决定是否补充传统基线。
 
-### 5.3 正式运行命令
+## 5. 正式实验固定设置
 
-```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2,1-3,2-1,3-6 \
-  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
-  --mtad_epochs 15 \
-  --batch_size 256 \
-  --use_gatv2 true \
-  --seed 42
+除非后续单独说明，当前论文正式实验统一使用：
+
+- `dataset=SMD`
+- `smd_groups=1-2,2-1,3-2`
+- `models=mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node`
+- `lookback=100`
+- `batch_size=256`
+- `mtad_epochs=15`
+- `use_gatv2=true`
+- `seed=42`
+- 不使用 `--max_train_size`
+- 不使用 `--max_test_size`
+
+## 6. 一次性正式运行命令
+
+### 6.1 前台运行命令
+
+```powershell
+python benchmark_models.py --datasets SMD --smd_groups 1-2,2-1,3-2 --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node --mtad_epochs 15 --batch_size 256 --use_gatv2 true --seed 42 --output_root thesis_runs_smd_pot_3machines
 ```
 
-### 5.4 需要保留的结果
+### 6.2 后台运行命令（推荐）
 
-- 每台机器、每个模型、每种阈值方法下的 `Precision / Recall / F1`
-- `benchmark_results.csv`
-- `best_per_entity.csv`
-- `run_config.json`
-- 各模型目录下的 `metrics.json`
-
-### 5.5 需要形成的论文材料
-
-- 主模型比较总表
-- 每个模型在 4 台机器上的平均表现
-- 一段关于主模型候选排序的分析文字
-
-## 6. 正式实验二：多随机种子稳定性实验
-
-### 6.1 目的
-
-- 验证模型排序不是由单次随机初始化偶然造成；
-- 检查不同模型在正式实验设置下的稳定性；
-- 为后续论文中的“结果可信性”提供支撑。
-
-### 6.2 参与模型
-
-- `mtad_gat_gru`
-- `mtad_gat_vae`
-- `mtad_gat_sparsemax_vae`
-- `mtad_gat_sparsemax_vae_node`
-
-### 6.3 推荐随机种子
-
-- `42`
-- `52`
-- `62`
-
-如时间允许，可扩展到 5 个随机种子；若时间紧张，先完成以上 3 个。
-
-### 6.4 正式运行命令
-
-```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2,1-3,2-1,3-6 \
-  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
-  --mtad_epochs 15 \
-  --batch_size 256 \
-  --use_gatv2 true \
-  --seed 42
+```powershell
+Start-Process -FilePath python -ArgumentList 'benchmark_models.py','--datasets','SMD','--smd_groups','1-2,2-1,3-2','--models','mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node','--mtad_epochs','15','--batch_size','256','--use_gatv2','true','--seed','42','--output_root','thesis_runs_smd_pot_3machines' -WorkingDirectory 'C:\Users\86199\Desktop\mtad-gat-pytorch-1' -RedirectStandardOutput 'C:\Users\86199\Desktop\mtad-gat-pytorch-1\thesis_runs_smd_pot_3machines.log' -RedirectStandardError 'C:\Users\86199\Desktop\mtad-gat-pytorch-1\thesis_runs_smd_pot_3machines.err.log' -WindowStyle Hidden
 ```
 
-```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2,1-3,2-1,3-6 \
-  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
-  --mtad_epochs 15 \
-  --batch_size 256 \
-  --use_gatv2 true \
-  --seed 52
-```
+说明：
+
+- 这条命令会在后台启动实验；
+- 标准输出写入 `thesis_runs_smd_pot_3machines.log`；
+- 错误输出写入 `thesis_runs_smd_pot_3machines.err.log`；
+- 结果目录写入 `thesis_runs_smd_pot_3machines`。
+
+## 7. 远程服务器一次性跑完论文实验与绘图
+
+### 7.1 本轮远程任务范围
+
+远程服务器端不只运行主对比实验，还要一次性完成：
+
+- 主实验：4 个 MTAD-GAT 变体在 `1-2`、`2-1`、`3-2` 上的正式 benchmark；
+- 稳定性实验：`seed=42,52,62`；
+- `GATv2` 消融：在论文主模型上分别跑 `use_gatv2=true/false`；
+- 详细输出实验：生成 `test_output.pkl`、`summary.txt`、`rca_attention` 等文件；
+- 论文绘图：生成主表汇总图、按机器分组柱状图、案例图、异常检测图、稀疏注意力热力图。
+
+### 7.2 统一入口脚本
+
+仓库中新增统一流水线脚本：
+
+- `run_thesis_pipeline.py`
+- `aggregate_thesis_results.py`
+- `bash_scripts/run_thesis_pipeline.sh`
+
+其中：
+
+- `run_thesis_pipeline.py` 负责依次调用 benchmark、详细训练、结果分析和案例绘图；
+- `aggregate_thesis_results.py` 负责把结果汇总成论文可直接使用的表格与图；
+- `bash_scripts/run_thesis_pipeline.sh` 用于在 Linux 服务器上一条命令启动整个流程。
+
+### 7.3 GitHub 上传后在远程服务器执行的推荐命令
+
+先在本地提交并推送到 GitHub，然后在远程服务器执行：
 
 ```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2,1-3,2-1,3-6 \
-  --models mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae,mtad_gat_sparsemax_vae_node \
-  --mtad_epochs 15 \
-  --batch_size 256 \
-  --use_gatv2 true \
-  --seed 62
+git clone <你的仓库地址>
+cd mtad-gat-pytorch-1
+pip install -r requirements_fixed.txt
+nohup bash bash_scripts/run_thesis_pipeline.sh > thesis_pipeline.nohup.log 2>&1 &
 ```
 
-### 6.5 需要形成的论文材料
-
-- 各模型在不同阈值方法下的 `mean +- std`
-- 关于稳定性与波动性的分析文字
-- 主模型排序是否跨 seed 保持一致的结论
-
-## 7. 正式实验三：结构消融实验
-
-### 7.1 目的
-
-- 解释最终模型为什么优于基础版本；
-- 量化 `VAE`、`Sparsemax`、`Node Embedding` 的贡献；
-- 为论文“方法分析”章节提供结构性证据。
-
-### 7.2 消融链条
-
-建议按以下逻辑解释：
-
-- `mtad_gat_gru -> mtad_gat_vae`
-- `mtad_gat_vae -> mtad_gat_sparsemax_vae`
-- `mtad_gat_sparsemax_vae -> mtad_gat_sparsemax_vae_node`
-
-### 7.3 是否需要单独重跑
-
-- 若“多随机种子稳定性实验”已经覆盖以上 4 个模型，则结构消融通常无需额外重跑；
-- 结构消融表可直接由正式对比实验与多 seed 结果整理得到。
-
-### 7.4 需要形成的论文材料
-
-- 一张结构消融表
-- 一段模块贡献分析文字
-- 对各组件收益是否稳定的简要结论
-
-## 8. 正式实验四：GATv2 消融实验
-
-### 8.1 目的
-
-- 验证 `use_gatv2=true` 是否在当前正式实验设置下具有稳定收益；
-- 为论文中是否保留 GATv2 相关表述提供依据。
-
-### 8.2 建议模型
-
-- 优先只在一个主模型候选上做；
-- 当前建议使用 `mtad_gat_vae`；
-- 若主模型比较结果显示 `mtad_gat_sparsemax_vae` 更适合作为最终主模型，可追加在该模型上复核一轮。
-
-### 8.3 正式运行命令
+如果服务器环境里默认 Python 不是 `python`，可以显式指定：
 
 ```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2,1-3,2-1,3-6 \
-  --models mtad_gat_vae \
-  --mtad_epochs 15 \
-  --batch_size 256 \
-  --use_gatv2 true \
-  --seed 42
+nohup env PYTHON_BIN=python3 bash bash_scripts/run_thesis_pipeline.sh > thesis_pipeline.nohup.log 2>&1 &
 ```
 
-```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2,1-3,2-1,3-6 \
-  --models mtad_gat_vae \
-  --mtad_epochs 15 \
-  --batch_size 256 \
-  --use_gatv2 false \
-  --seed 42
-```
+### 7.4 流水线默认输出
 
-### 8.4 需要形成的论文材料
+整套流程默认输出到：
 
-- `use_gatv2=true` 与 `use_gatv2=false` 的结果对比表
-- 各机器差异与平均差异
-- 一段关于是否保留 GATv2 默认设置的结论
+- `thesis_artifacts/`
 
-## 9. 正式实验五：定性案例与可视化实验
+重点关注：
 
-### 9.1 目的
+- `thesis_artifacts/manifest.json`
+- `thesis_artifacts/logs/`
+- `thesis_artifacts/paper_assets/tables/`
+- `thesis_artifacts/paper_assets/figures/`
 
-- 为论文正文提供直观案例；
-- 展示模型对异常片段的定位能力；
-- 支撑定量表格之外的可解释性分析。
+### 7.5 论文写作时优先使用的输出
 
-### 9.2 推荐机器
+- 主表：`thesis_artifacts/paper_assets/tables/main_pot_f1.csv`
+- 主表补充指标：`thesis_artifacts/paper_assets/tables/main_pot_precision.csv`
+- 主表补充指标：`thesis_artifacts/paper_assets/tables/main_pot_recall.csv`
+- 阈值法辅助表：`thesis_artifacts/paper_assets/tables/aux_threshold_averages.csv`
+- 稳定性表：`thesis_artifacts/paper_assets/tables/seed_stability_pot.csv`
+- GATv2 消融表：`thesis_artifacts/paper_assets/tables/gatv2_ablation_pot.csv`
+- 平均性能图：`thesis_artifacts/paper_assets/figures/pot_average_f1.png`
+- 机器分组图：`thesis_artifacts/paper_assets/figures/pot_f1_by_machine.png`
+- 案例图：`thesis_artifacts/paper_assets/figures/case_compare_1-2_pot.png`
+- 案例图：`thesis_artifacts/paper_assets/figures/case_compare_3-2_pot.png`
 
-- `1-3`：适合展示模型差异；
-- `2-1` 或 `3-6`：适合展示相对稳定、较清晰的检测效果。
-
-### 9.3 推荐模型
-
-- `mtad_gat_gru`
-- `mtad_gat_vae`
-
-如后续主模型确认是 `mtad_gat_sparsemax_vae`，则可替换其中一个模型。
-
-### 9.4 需要形成的论文材料
-
-- 异常分数曲线
-- 真实异常区间
-- 阈值线
-- 2 到 4 张最终论文插图
-- 一段案例分析文字
-
-## 10. 可选补充：传统基线实验
-
-如果论文需要体现“与传统方法比较”，可补充以下模型：
-
-- `pca`
-- `isolation_forest`
-
-建议单独执行，不与结构消融主线混在同一张表里，避免表格叙事混乱。
-
-### 10.1 建议命令
-
-```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2,1-3,2-1,3-6 \
-  --models pca,isolation_forest,mtad_gat_gru,mtad_gat_vae,mtad_gat_sparsemax_vae \
-  --mtad_epochs 15 \
-  --batch_size 256 \
-  --use_gatv2 true \
-  --seed 42
-```
-
-### 10.2 使用建议
-
-- 若论文篇幅有限，可将传统基线作为补充表或附录表；
-- 若需要突出改进方法优于传统方法，可单独做一张“传统基线 vs 主模型”表。
-
-## 11. 快速调试实验与正式实验的边界
-
-### 11.1 快速调试允许使用
-
-- `--max_train_size`
-- `--max_test_size`
-- 较少的 `mtad_epochs`
-- 较少的机器数量
-
-### 11.2 正式实验禁止使用
-
-- 在最终论文结果对应命令中加入 `--max_train_size`
-- 在最终论文结果对应命令中加入 `--max_test_size`
-- 把调试运行结果混入正式实验结论
-
-### 11.3 调试命令示例
-
-```bash
-python benchmark_models.py \
-  --datasets SMD \
-  --smd_groups 1-2 \
-  --models mtad_gat_gru,mtad_gat_vae \
-  --max_train_size 2000 \
-  --max_test_size 2000 \
-  --mtad_epochs 3 \
-  --batch_size 256 \
-  --seed 42
-```
-
-该命令仅用于检查脚本是否跑通，不得进入论文正式结果。
-
-## 12. 每次正式实验必须保存的文件
+## 8. 本轮实验需要保留的文件
 
 每次正式运行后，至少保留：
 
@@ -358,96 +179,48 @@ python benchmark_models.py \
 - `benchmark_results.csv`
 - `best_per_entity.csv`
 - 各模型目录下的 `metrics.json`
+- 后台日志文件：
+  - `thesis_runs_smd_pot_3machines.log`
+  - `thesis_runs_smd_pot_3machines.err.log`
 
-如有定性分析或图像输出，额外保留：
-
-- 可视化图片
-- 中间分数文件
-- 手工筛选案例记录
-
-## 13. 最终需要汇总出的论文结果
-
-全部实验完成后，至少需要整理出：
-
-- 主模型比较总表
-- 多 seed 稳定性汇总表
-- 结构消融汇总表
-- GATv2 消融汇总表
-- 最终案例可视化图
-
-若补传统基线，还需整理：
-
-- 传统基线与主模型比较表
-
-## 14. 论文表格建议
+## 9. 论文中需要整理出的表格
 
 ### 表 1：主模型比较表
 
-- 行：`mtad_gat_gru`、`mtad_gat_vae`、`mtad_gat_sparsemax_vae`、`mtad_gat_sparsemax_vae_node`
-- 列：`1-2`、`1-3`、`2-1`、`3-6`、`Average`
-- 指标：待结果汇总后确定主指标对应列，同时可附辅指标结果
-
-### 表 2：多随机种子稳定性表
-
 - 行：4 个 MTAD-GAT 变体
-- 列：各阈值方法下的 `mean +- std`
+- 列：`1-2`、`2-1`、`3-2`、`Average`
+- 主指标：`pot_result` 下的 `F1`
+- 可附：`Precision`、`Recall`
 
-### 表 3：结构消融表
+### 表 2：辅助指标表
 
-- 行：`GRU`、`VAE`、`VAE + Sparsemax`、`VAE + Sparsemax + Node Embedding`
-- 内容：各设置在正式实验数据上的结果汇总
+- 同样的模型与机器设置；
+- 补充汇报 `epsilon_result` 与 `bf_result`；
+- 作用是说明结论不完全依赖单一阈值法。
 
-### 表 4：GATv2 消融表
+### 表 3：结构消融说明表
 
-- 行：`use_gatv2=false`、`use_gatv2=true`
-- 内容：同一模型在两种设置下的结果比较
+- `mtad_gat_gru`
+- `mtad_gat_vae`
+- `mtad_gat_sparsemax_vae`
+- `mtad_gat_sparsemax_vae_node`
 
-### 可选表 5：传统基线比较表
+该表可直接由主实验结果整理得到，无需额外重复跑一套实验。
 
-- 行：`pca`、`isolation_forest`、主模型候选
-- 作用：展示改进模型与传统方法的差异
+## 10. 当前阶段执行顺序
 
-## 15. 论文图片建议
+1. 先跑 3 台机器的正式主实验；
+2. 汇总 `pot_result`，形成论文主表；
+3. 再补充 `epsilon_result` 与 `bf_result` 作为辅助结果；
+4. 根据主表结果决定是否追加第 4 台或更多机器。
 
-### 图 1：主模型异常分数图
+## 11. 当前最小可交付版本
 
-- 机器：`1-3`
-- 内容：`anomaly score + threshold + 真实异常区间`
+如果当前目标是先把论文写出来，那么最小可交付版本包括：
 
-### 图 2：模型对比例图
-
-- 同一台机器上比较 `mtad_gat_gru` 与主模型候选
-
-### 图 3：GATv2 消融图
-
-- 展示 `use_gatv2=true` 与 `use_gatv2=false` 的差异
-
-### 图 4：平均性能图
-
-- 展示多个模型在 4 台机器上的平均表现
-
-## 16. 推荐执行顺序
-
-1. 跑正式主模型对比实验；
-2. 跑多随机种子稳定性实验；
-3. 基于已有结果整理结构消融表；
-4. 跑 GATv2 消融实验；
-5. 视论文需要补传统基线实验；
-6. 生成定性案例图并整理正文图表。
-
-## 17. 最小可交付版本
-
-若时间紧张，论文正式实验的最小可交付版本包括：
-
-- 一组正式主模型比较实验：`1-2,1-3,2-1,3-6`
-- 三个 seed 的稳定性验证
-- 一组 GATv2 消融实验
-- 两张定性案例图
-- 四张核心表格
-
-## 18. 当前阶段注意事项
-
-- 当前阶段先不要在计划文件中写死唯一主模型；
-- 当前阶段先不要在计划文件中写死唯一主指标；
-- 当前阶段先保证正式实验设置统一、命令可复现、输出文件完整；
-- 等所有正式结果齐全后，再确定论文最终的主模型口径和指标口径。
+- `SMD` 上 `1-2`、`2-1`、`3-2` 三台机器；
+- 4 个 MTAD-GAT 变体；
+- 主指标固定为 `POT`；
+- 一张主模型比较表；
+- 一张辅助指标表；
+- 一段关于机器选择依据的文字说明。
