@@ -110,6 +110,10 @@ class MTAD_GAT(nn.Module):
         sparse_attention = None
         if self.use_adaptive_sparse_feat_gat and return_sparse_attention:
             h_feat, sparse_attention = self.feature_gat(x, return_sparse_attention=True)
+        elif return_sparse_attention and getattr(self.feature_gat, "use_sparsemax", False):
+            # Reuse the existing sparsemax feature attention for RCA export when
+            # the adaptive sparse GAT branch is not enabled.
+            h_feat, sparse_attention = self.feature_gat(x, return_attention=True)
         else:
             h_feat = self.feature_gat(x)
         h_temp = self.temporal_gat(x)
