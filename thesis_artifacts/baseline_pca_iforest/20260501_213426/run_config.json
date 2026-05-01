@@ -1,0 +1,44 @@
+{
+  "datasets": [
+    "SMD"
+  ],
+  "models": [
+    "pca",
+    "isolation_forest"
+  ],
+  "smd_groups": [
+    "1-2",
+    "2-1",
+    "3-2"
+  ],
+  "lookback": 100,
+  "normalize": true,
+  "batch_size": 256,
+  "val_split": 0.1,
+  "weight_decay": 0.0,
+  "gamma": 1.0,
+  "seed": 42,
+  "use_cuda": true,
+  "use_gatv2": true,
+  "output_root": "thesis_artifactsbaseline_pca_iforest",
+  "max_train_size": null,
+  "max_test_size": null,
+  "pca_variance_ratio": 0.95,
+  "iforest_estimators": 200,
+  "iforest_contamination": "auto",
+  "gdn_epochs": 20,
+  "gdn_lr": 0.001,
+  "gdn_hidden_dim": 64,
+  "gdn_topk": 10,
+  "mtad_epochs": 30,
+  "mtad_lr": 0.001,
+  "mtad_gru_hid_dim": 150,
+  "mtad_fc_hid_dim": 150,
+  "mtad_recon_hid_dim": 150,
+  "mtad_node_embed_dim": 16,
+  "mtad_vae_latent_dim": 64,
+  "mtad_kl_beta": 0.001,
+  "mtad_use_sparsemax": false,
+  "mtad_use_node_embedding": false,
+  "mtad_custom_recon_model": "gru"
+}
