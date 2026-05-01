@@ -14,3 +14,10 @@ output/
 *.pkl
 *.npy
 *.pt
+.claude/
+
+# 临时生成的PDF路径文件
+pdf_extract_summary.json
+pdf_paths.json
+survey_path.txt
+main.tex

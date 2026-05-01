@@ -38,6 +38,13 @@ def parse_args():
         choices=["epsilon_result", "pot_result", "bf_result"],
         help="Which threshold result to report in summary_report.txt.",
     )
+    parser.add_argument(
+        "--rca_eval_unit",
+        type=str,
+        default="timestamp",
+        choices=["timestamp", "window"],
+        help="Interpretation-label alignment unit for RCA evaluation.",
+    )
     return parser.parse_args()
 
 
@@ -193,66 +200,202 @@ def sensor_scores_from_attention(attn_matrix):
     return row_sum + col_sum
 
 
-def compute_rca_hitk(target_dir, dataset, group, label_path_override=None):
+def load_rca_attention(target_dir):
     rca_dir = os.path.join(target_dir, "rca_attention")
     if not os.path.isdir(rca_dir):
         warnings.warn("rca_attention folder not found under {}".format(target_dir))
-        return None, None, None
+        return None
 
-    selected_path = os.path.join(rca_dir, "selected_indices.npy")
     all_attn_path = os.path.join(rca_dir, "all_sparse_attention.npy")
-
-    if not os.path.isfile(selected_path):
-        warnings.warn("selected_indices.npy not found: {}".format(selected_path))
-        return None, None, None
     if not os.path.isfile(all_attn_path):
         warnings.warn("all_sparse_attention.npy not found: {}".format(all_attn_path))
-        return None, None, None
+        return None
+
+    all_attn = np.load(all_attn_path)
+    if all_attn.ndim != 3 or all_attn.shape[1] != all_attn.shape[2]:
+        warnings.warn("Unexpected sparse attention shape: {}".format(all_attn.shape))
+        return None
+    return all_attn
+
+
+def normalize_label_ranges(label_ranges, all_dims, n_features):
+    normalized = []
+    one_based = len(all_dims) > 0 and min(all_dims) >= 1
+    for start_i, end_i, dims in label_ranges:
+        if one_based:
+            dims = maybe_to_zero_based(dims)
+        dims = sorted({int(d) for d in dims if 0 <= int(d) < n_features})
+        if dims:
+            normalized.append((int(start_i), int(end_i), dims))
+    return normalized
+
+
+def build_rca_eval_samples(label_ranges, n_timestamps, eval_unit="timestamp"):
+    samples = []
+    for start_i, end_i, dims in label_ranges:
+        clipped_start = max(0, int(start_i))
+        clipped_end = min(int(end_i), n_timestamps - 1)
+        if clipped_start > clipped_end or not dims:
+            continue
+
+        if eval_unit == "window":
+            samples.append(
+                {
+                    "start": clipped_start,
+                    "end": clipped_end,
+                    "gt_dims": dims,
+                }
+            )
+        else:
+            for idx in range(clipped_start, clipped_end + 1):
+                samples.append(
+                    {
+                        "index": idx,
+                        "gt_dims": dims,
+                    }
+                )
+    return samples
+
+
+def compute_dynamic_k(n_relevant, ratio):
+    return max(1, int(np.floor(float(n_relevant) * float(ratio))))
+
+
+def compute_dcg_at_k(ranked, gt_set, k):
+    dcg = 0.0
+    for rank_i, dim in enumerate(ranked[:k], start=1):
+        if int(dim) in gt_set:
+            dcg += 1.0 / np.log2(rank_i + 1.0)
+    return dcg
+
+
+def compute_ndcg_at_k(ranked, gt_set, k):
+    ideal_hits = min(len(gt_set), int(k))
+    if ideal_hits <= 0:
+        return None
+    idcg = sum(1.0 / np.log2(rank_i + 1.0) for rank_i in range(1, ideal_hits + 1))
+    if idcg <= 0:
+        return None
+    return compute_dcg_at_k(ranked, gt_set, k) / idcg
+
+
+def compute_average_precision(ranked, gt_set):
+    if not gt_set:
+        return None
+
+    hit_count = 0
+    precision_sum = 0.0
+    for rank_i, dim in enumerate(ranked, start=1):
+        if int(dim) in gt_set:
+            hit_count += 1
+            precision_sum += hit_count / float(rank_i)
+
+    if hit_count == 0:
+        return 0.0
+    return precision_sum / float(len(gt_set))
+
+
+def compute_reciprocal_rank(ranked, gt_set):
+    for rank_i, dim in enumerate(ranked, start=1):
+        if int(dim) in gt_set:
+            return 1.0 / float(rank_i)
+    return 0.0
+
+
+def evaluate_ranked_root_causes(ranked, gt_dims):
+    gt_set = set(int(d) for d in gt_dims)
+    if not gt_set:
+        return None
+
+    k100 = compute_dynamic_k(len(gt_set), 1.0)
+    k150 = compute_dynamic_k(len(gt_set), 1.5)
+
+    ranked_list = ranked.tolist() if hasattr(ranked, "tolist") else list(ranked)
+    metrics = {
+        "hit1": 1.0 if len(set(ranked_list[:1]) & gt_set) > 0 else 0.0,
+        "hit3": 1.0 if len(set(ranked_list[:3]) & gt_set) > 0 else 0.0,
+        "hit5": 1.0 if len(set(ranked_list[:5]) & gt_set) > 0 else 0.0,
+        "hitrate_100": len(set(ranked_list[:k100]) & gt_set) / float(len(gt_set)),
+        "hitrate_150": len(set(ranked_list[:k150]) & gt_set) / float(len(gt_set)),
+        "ndcg_100": compute_ndcg_at_k(ranked_list, gt_set, k100),
+        "ndcg_150": compute_ndcg_at_k(ranked_list, gt_set, k150),
+        "mrr": compute_reciprocal_rank(ranked_list, gt_set),
+        "map": compute_average_precision(ranked_list, gt_set),
+    }
+    return metrics
+
+
+def aggregate_metric_lists(metric_lists):
+    aggregated = {}
+    for metric_name, values in metric_lists.items():
+        if len(values) == 0:
+            aggregated[metric_name] = None
+        else:
+            aggregated[metric_name] = float(np.mean(values))
+    return aggregated
+
+
+def compute_rca_ranking_metrics(target_dir, dataset, group, label_path_override=None, eval_unit="timestamp"):
+    all_attn = load_rca_attention(target_dir)
+    if all_attn is None:
+        return None
 
     group = infer_group_from_target_dir(dataset, group, target_dir)
     label_path = resolve_label_path(dataset, group, label_path_override=label_path_override)
     if label_path is None or not os.path.isfile(label_path):
         warnings.warn("Interpretation label file not found for dataset/group.")
-        return None, None, None
+        return None
 
-    selected = np.load(selected_path)
-    all_attn = np.load(all_attn_path)
     label_ranges, all_dims = parse_interpretation_labels(label_path)
+    normalized_ranges = normalize_label_ranges(label_ranges, all_dims, n_features=all_attn.shape[1])
+    samples = build_rca_eval_samples(normalized_ranges, n_timestamps=all_attn.shape[0], eval_unit=eval_unit)
 
-    one_based = len(all_dims) > 0 and min(all_dims) >= 1
-    if one_based:
-        label_ranges = [(s, e, maybe_to_zero_based(d)) for s, e, d in label_ranges]
+    if not samples:
+        warnings.warn("No aligned interpretation-label samples found for RCA evaluation.")
+        return None
 
-    hit1_list = []
-    hit3_list = []
-    hit5_list = []
+    metric_lists = {
+        "hit1": [],
+        "hit3": [],
+        "hit5": [],
+        "hitrate_100": [],
+        "hitrate_150": [],
+        "ndcg_100": [],
+        "ndcg_150": [],
+        "mrr": [],
+        "map": [],
+    }
 
-    for idx in selected:
-        idx = int(idx)
-        if idx < 0 or idx >= all_attn.shape[0]:
-            continue
+    for sample in samples:
+        if eval_unit == "window":
+            start_i = sample["start"]
+            end_i = sample["end"]
+            attn_matrix = np.mean(all_attn[start_i:end_i + 1], axis=0)
+        else:
+            attn_matrix = all_attn[sample["index"]]
 
-        gt_dims = get_true_dims_for_index(idx, label_ranges)
-        if not gt_dims:
-            continue
-
-        scores = sensor_scores_from_attention(all_attn[idx])
+        scores = sensor_scores_from_attention(attn_matrix)
         ranked = np.argsort(scores)[::-1]
+        sample_metrics = evaluate_ranked_root_causes(ranked, sample["gt_dims"])
+        if sample_metrics is None:
+            continue
 
-        top1 = set(ranked[:1].tolist())
-        top3 = set(ranked[:3].tolist())
-        top5 = set(ranked[:5].tolist())
-        gt_set = set(gt_dims)
+        for metric_name, metric_value in sample_metrics.items():
+            if metric_value is not None:
+                metric_lists[metric_name].append(float(metric_value))
 
-        hit1_list.append(1.0 if len(top1 & gt_set) > 0 else 0.0)
-        hit3_list.append(1.0 if len(top3 & gt_set) > 0 else 0.0)
-        hit5_list.append(1.0 if len(top5 & gt_set) > 0 else 0.0)
+    used_samples = len(metric_lists["mrr"])
+    if used_samples == 0:
+        warnings.warn("No valid interpretation-label samples remained after RCA alignment.")
+        return None
 
-    if not hit1_list:
-        warnings.warn("No aligned samples between selected_indices and interpretation labels.")
-        return None, None, None
-
-    return float(np.mean(hit1_list)), float(np.mean(hit3_list)), float(np.mean(hit5_list))
+    aggregated = aggregate_metric_lists(metric_lists)
+    aggregated["sample_count"] = int(used_samples)
+    aggregated["feature_count"] = int(all_attn.shape[1])
+    aggregated["eval_unit"] = str(eval_unit)
+    aggregated["label_path"] = str(label_path)
+    aggregated["source"] = "interpretation_label"
+    return aggregated
 
 
 def plot_anomaly_detection(target_dir):
@@ -354,25 +497,54 @@ def set_publication_style():
             continue
 
 
-def build_markdown_summary(dataset, group, target_dir, f1, precision, recall, hit1, hit3):
+def build_markdown_summary(dataset, group, target_dir, f1, precision, recall, rca_metrics=None):
     timestamp = os.path.basename(target_dir.rstrip("/"))
     group_text = group if group is not None else "-"
-    table = []
-    table.append("| Dataset | Group | Timestamp | F1-Score | Precision | Recall | Hit@1 | Hit@3 |")
-    table.append("|---|---|---|---:|---:|---:|---:|---:|")
-    table.append(
-        "| {ds} | {gp} | {ts} | {f1} | {pr} | {rc} | {h1} | {h3} |".format(
+    lines = []
+    lines.append("Detection Summary")
+    lines.append("| Dataset | Group | Timestamp | F1-Score | Precision | Recall |")
+    lines.append("|---|---|---|---:|---:|---:|")
+    lines.append(
+        "| {ds} | {gp} | {ts} | {f1} | {pr} | {rc} |".format(
             ds=dataset,
             gp=group_text,
             ts=timestamp,
             f1=format_metric(f1),
             pr=format_metric(precision),
             rc=format_metric(recall),
-            h1=format_metric(hit1),
-            h3=format_metric(hit3),
         )
     )
-    return "\n".join(table)
+    if rca_metrics is None:
+        lines.append("")
+        lines.append("RCA Summary")
+        lines.append("Interpretation-label-aligned RCA metrics: N/A")
+        return "\n".join(lines)
+
+    lines.append("")
+    lines.append("RCA Summary")
+    lines.append(
+        "| Samples | Eval Unit | Hit@1 | Hit@3 | Hit@5 | HitRate@100% | HitRate@150% | NDCG@100% | NDCG@150% | MRR | MAP |"
+    )
+    lines.append("|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append(
+        "| {samples} | {unit} | {hit1} | {hit3} | {hit5} | {hr100} | {hr150} | {ndcg100} | {ndcg150} | {mrr} | {mapv} |".format(
+            samples=rca_metrics.get("sample_count", "N/A"),
+            unit=rca_metrics.get("eval_unit", "N/A"),
+            hit1=format_metric(rca_metrics.get("hit1")),
+            hit3=format_metric(rca_metrics.get("hit3")),
+            hit5=format_metric(rca_metrics.get("hit5")),
+            hr100=format_metric(rca_metrics.get("hitrate_100")),
+            hr150=format_metric(rca_metrics.get("hitrate_150")),
+            ndcg100=format_metric(rca_metrics.get("ndcg_100")),
+            ndcg150=format_metric(rca_metrics.get("ndcg_150")),
+            mrr=format_metric(rca_metrics.get("mrr")),
+            mapv=format_metric(rca_metrics.get("map")),
+        )
+    )
+    lines.append("")
+    lines.append("RCA source: interpretation_label")
+    lines.append("RCA label file: {}".format(rca_metrics.get("label_path", "N/A")))
+    return "\n".join(lines)
 
 
 def main():
@@ -396,15 +568,16 @@ def main():
     f1, precision, recall = load_summary_metrics(target_dir, threshold_method=args.threshold_method)
 
     try:
-        hit1, hit3, hit5 = compute_rca_hitk(
+        rca_metrics = compute_rca_ranking_metrics(
             target_dir,
             dataset,
             group,
             label_path_override=args.label_path,
+            eval_unit=args.rca_eval_unit,
         )
     except Exception as e:
         warnings.warn("RCA metric computation failed: {}".format(e))
-        hit1, hit3, hit5 = None, None, None
+        rca_metrics = None
 
     try:
         plot_anomaly_detection(target_dir)
@@ -423,19 +596,26 @@ def main():
         f1=f1,
         precision=precision,
         recall=recall,
-        hit1=hit1,
-        hit3=hit3,
+        rca_metrics=rca_metrics,
     )
 
     print(md_table)
     report_path = os.path.join(target_dir, "summary_report.txt")
     with open(report_path, "w") as f:
         f.write(md_table + "\n")
+    unit_report_path = os.path.join(target_dir, "summary_report_{}.txt".format(args.rca_eval_unit))
+    with open(unit_report_path, "w") as f:
+        f.write(md_table + "\n")
 
-    if hit5 is not None:
-        print("Hit@5: {:.4f}".format(hit5))
+    if rca_metrics is not None:
+        print("HitRate@100%: {}".format(format_metric(rca_metrics.get("hitrate_100"))))
+        print("HitRate@150%: {}".format(format_metric(rca_metrics.get("hitrate_150"))))
+        print("NDCG@100%: {}".format(format_metric(rca_metrics.get("ndcg_100"))))
+        print("NDCG@150%: {}".format(format_metric(rca_metrics.get("ndcg_150"))))
+        print("MRR: {}".format(format_metric(rca_metrics.get("mrr"))))
+        print("MAP: {}".format(format_metric(rca_metrics.get("map"))))
     else:
-        print("Hit@5: N/A")
+        print("RCA metrics: N/A")
 
 
 if __name__ == "__main__":
